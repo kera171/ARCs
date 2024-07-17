@@ -4,15 +4,7 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
   
-  
-  #install.packages("remotes")
-  #remotes::install_github("stefanocoretta/tidygam@v0.1.0")
-  
-  #library(remotes)
-  #remotes::install_github("gavinsimpson/gratia")
-  
-  #install.packages('gratia')
-  #install.packages('gridExtra')
+
   
 library(tidyverse)
 library(lubridate)
@@ -38,72 +30,220 @@ basic_theme <- theme(panel.grid=element_blank(),
 setwd("C:/Users/amudahy/OneDrive - Environmental Protection Agency (EPA)/Profile/Documents/Rdata/ARCs")
 #load("~/Rdata/arc2021excr.Rdata")
 load("~/Rdata/ARCs/R data/arc2020excr.Rdata")
-load("~/Rdata/ARCs/R data/arc2021excr.2.Rdata")
+load("~/Rdata/ARCs/R data/arc2021excr.Rdata")
 load("~/Rdata/ARCs/R data/tide2021ARCS.Rdata")
-names(arc2021EXCR.2) <- c ('Timestamp.Rates','Rates.ES','Rates.ED', 'surf.salinity',
+load("~/Rdata/ARCs/R data/arc2022excr.Rdata")
+load("~/Rdata/ARCs/R data/tide2020ARCS.Rdata")
+
+#arc2020EXCR$
+names(arc2021EXCR) <- c ('timestamp.rates','rates.es','rates.ed', 'surf.salinity',
                            'mid.salinity','deep.salinity','surf.temp','mid.temp','deep.temp',
                            'surf.o2','mid.o2','deep.o2','chl.ugl','surf.pressure','mid.pressure','deep.pressure',
-                           'density.es','rho.dif.es','rho.delta.es'
+                           'density.es','rho.dif.es','rho.delta.es','windspd','winddirection'
 )
 
-names(arc2020EXCR) <- c ('Timestamp.Rates','Rates.ES', 'surf.salinity',
+names(arc2020EXCR) <- c ('timestamp.rates','rates.es', 'surf.salinity',
                            'mid.salinity','deep.salinity','surf.temp','mid.temp','deep.temp',
-                           'surf.o2','mid.o2','deep.o2'
+                           'surf.o2','mid.o2','deep.o2','windspd','winddirection'
+)
+names(arc2022EXCR) <- c ('timestamp.rates','rates.es','rates.ed', 'surf.salinity',
+                         'mid.salinity','deep.salinity','surf.temp','mid.temp','deep.temp',
+                         'surf.o2','mid.o2','deep.o2','chl.ugl','par','tide','windspd','winddirection','surf.pressure','mid.pressure','deep.pressure',
+                         'density.es','rho.dif.es','rho.delta.es'
 )
 
 
+
+tide.1$TimeStamp.EST <- as_datetime(tide.1$TimeStamp.UTC,tz="Jamaica")
 
 tide.2$TimeStamp.EST <- as_datetime(tide.2$TimeStamp.UTC,tz="Jamaica")
 
-arc2021EXCR.2$tide.height.m <- approx(tide.2$TimeStamp.EST, tide.2$height.m,arc2021EXCR.2$Timestamp.Rates) %>%
+arc2021EXCR$tide <- approx(tide.2$TimeStamp.EST, tide.2$height.m,arc2021EXCR$timestamp.rates) %>%
   .[[2]]
 
-
+arc2020EXCR$tide <- approx(tide.1$TimeStamp.EST, tide.1$height.m,arc2020EXCR$timestamp.rates) %>%
+  .[[2]]
 
 # calculate predictor variables
-arc2021EXCR.2<- arc2021EXCR.2%>% 
+arc2020EXCR<- arc2020EXCR%>% 
   mutate(
-    month=month(Timestamp.Rates),
-    hour=hour(Timestamp.Rates),   # hour of the day, 0-23
-    doy=yday(Timestamp.Rates)+hour/24,  # decimal day of year
-    year=year(Timestamp.Rates)+doy/365
+    month=month(timestamp.rates),
+    hour=hour(timestamp.rates),   # hour of the day, 0-23
+    doy=yday(timestamp.rates)+hour/24,  # decimal day of year
+    year=year(timestamp.rates)+doy/365
   )
 
-model.1 <- with(arc2021EXCR.2,gam(Rates.ES ~
+
+arc2021EXCR<- arc2021EXCR%>% 
+  mutate(
+    month=month(timestamp.rates),
+    hour=hour(timestamp.rates),   # hour of the day, 0-23
+    doy=yday(timestamp.rates)+hour/24,  # decimal day of year
+    year=year(timestamp.rates)+doy/365
+  )
+arc2022EXCR<- arc2022EXCR%>% 
+  mutate(
+    month=month(timestamp.rates),
+    hour=hour(timestamp.rates),   # hour of the day, 0-23
+    doy=yday(timestamp.rates)+hour/24,  # decimal day of year
+    year=year(timestamp.rates)+doy/365
+  )
+
+
+
+model.2021 <- with(arc2021EXCR,gam(rates.es ~
                                     #s(hour,bs="cc",k=4) +
-                                    s(surf.salinity)+
-                                    mid.salinity+
-                                    s(surf.temp)+
-                                    s(mid.temp)+
+                                    s(mid.salinity)+
                                     s(surf.o2)+
-                                    s(mid.o2)+
-                                    ti(surf.temp,surf.o2)+
+                                    s(windspd)+
+                                    s(winddirection)+
+                                    s(tide,bs="cc",k=6)+
+                                    ti(windspd,winddirection)+
+                                    ti(tide,surf.salinity)+
+                                    ti(windspd,surf.salinity)+
                                     ti(surf.temp,mid.o2)+
-                                    ti(mid.temp,mid.o2)+
                                     ti(surf.salinity,surf.o2)+
                                     ti(surf.salinity,mid.o2)+
-                                    ti(mid.salinity,surf.o2)+
                                     ti(mid.salinity,mid.o2)
-                                  
 ))
 
-model.3<- with(arc2021EXCR.2,gam(Rates.ES ~ 
-                                   s(surf.salinity)+
-                                   s(mid.salinity,k=3)+
-                                   s(mid.o2,k=3)+
-                                   s(surf.o2)+
-                                   ti(mid.salinity,mid.o2,k=3)+
-                                   ti(surf.salinity,surf.o2,k=3)
-))
-arc2020EXCR$predicted.rates <- predict(model.1,arc2020EXCR)
+summary(model.2021)
 
+model.2021b <- with(arc2021EXCR,gam(rates.ed ~
+                                      #s(hour,bs="cc",k=4) +
+                                      s(deep.salinity)+
+                                      s(deep.o2)+
+                                      s(windspd)+
+                                      s(winddirection)+
+                                      s(tide,bs="cc",k=6)+
+                                      ti(chl.ugl,surf.o2)+
+                                      #ti(chl.ugl,par,k=4)+
+                                      #ti(par,mid.o2)+
+                                      ti(chl.ugl,deep.temp)+
+                                      ti(windspd,winddirection)+
+                                      ti(tide,surf.salinity)+
+                                      ti(windspd,tide)+
+                                      ti(windspd,deep.salinity)+
+                                      ti(deep.temp,deep.o2)+
+                                      ti(surf.salinity,deep.o2)+
+                                      ti(surf.salinity,deep.o2)+
+                                      ti(mid.salinity,deep.o2)
+))
+
+summary(model.2021b)
+
+
+plotGAMpredictions.1 <- function(inModel,inData) {
+  
+  # Plot the predicted values for 
+  rate.predicted <- predict(inModel,inData)
+  inData <- inData %>% mutate(residual=rates.es-rate.predicted)
+  sefit <- predict(inModel,inData,se.fit = TRUE)
+  plt.1c <- ggplot()+
+    geom_point(data=inData,aes(x=timestamp.rates,y=rates.es),color="light grey",size=1,shape=1)+
+    geom_line(data=inData,aes(x=timestamp.rates,y=rate.predicted,group=factor(year(timestamp.rates))),color=pal[1])+
+    theme_classic()+
+    scale_x_datetime(date_breaks="2 weeks",date_labels = "%m/%y")+
+    ggtitle("Respiration Rates at EXCR Surface 2021")
+  
+  plt.2c <- ggplot()+
+    geom_point(data=inData,aes(x=timestamp.rates,y=residual),color=pal[1],size=1.5,shape=1)+
+    theme_classic()+
+    scale_x_datetime( date_breaks="2 months",date_labels = "%m/%y")+
+    ggtitle("Residual Respiration Rates at EXCR Surface 2021 ")
+  
+  return(list(plot1c=plt.1c,plot2c=plt.2c))
+}
+plotGAMpredictions.1b <- function(inModel,inData) {
+  
+  # Plot the predicted values for 
+  rate.predicted <- predict(inModel,inData)
+  inData <- inData %>% mutate(residual=rates.ed-rate.predicted)
+  sefit <- predict(inModel,inData,se.fit = TRUE)
+  plt.1c <- ggplot()+
+    geom_point(data=inData,aes(x=timestamp.rates,y=rates.ed),color="light grey",size=1,shape=1)+
+    geom_line(data=inData,aes(x=timestamp.rates,y=rate.predicted,group=factor(year(timestamp.rates))),color=pal[1])+
+    theme_classic()+
+    scale_x_datetime(date_breaks="2 weeks",date_labels = "%m/%y")+
+    ggtitle("Respiration Rates at EXCR Deep 2021")
+  
+  plt.2c <- ggplot()+
+    geom_point(data=inData,aes(x=timestamp.rates,y=residual),color=pal[1],size=1.5,shape=1)+
+    theme_classic()+
+    scale_x_datetime( date_breaks="2 months",date_labels = "%m/%y")+
+    ggtitle("Residual Respiration Rates at EXCR Deep 2021 ")
+  
+  return(list(plot1c=plt.1c,plot2c=plt.2c))
+}
+
+
+output.1 <- plotGAMpredictions.1(model.2021,arc2021EXCR)
+output.1b <- plotGAMpredictions.1b(model.2021b,arc2021EXCR)
+
+output.1$plot1c
+output.1b$plot1c
+
+#predict 2020 rates
+
+model.2020 <- with(arc2020EXCR,gam(rates.es ~
+                                  #s(hour,bs="cc",k=4) +
+                                  s(mid.salinity)+
+                                  s(surf.o2)+
+                                  s(windspd)+
+                                  s(winddirection)+
+                                  s(tide,bs="cc",k=6)+
+                                  ti(windspd,winddirection)+
+                                  ti(tide,surf.salinity)+
+                                  ti(windspd,surf.salinity)+
+                                  ti(surf.temp,mid.o2)+
+                                  ti(surf.salinity,surf.o2)+
+                                  ti(surf.salinity,mid.o2)+
+                                  ti(mid.salinity,mid.o2)
+                                
+))
+
+summary(model.2020)
+
+
+model.2022 <- with(arc2022EXCR,gam(rates.es ~
+                                  #s(hour,bs="cc",k=4) +
+                                  s(mid.salinity)+
+                                  s(surf.o2)+
+                                  s(windspd)+
+                                  s(winddirection)+
+                                  s(tide,bs="cc",k=6)+
+                                  ti(windspd,winddirection)+
+                                  ti(tide,surf.salinity)+
+                                  ti(windspd,surf.salinity)+
+                                  ti(surf.temp,mid.o2)+
+                                  ti(surf.salinity,surf.o2)+
+                                  ti(surf.salinity,mid.o2)+
+                                  ti(mid.salinity,mid.o2)
+                                
+))
+
+summary(model.2022)
+
+
+
+
+arc2020EXCR$predicted.rates <- predict(model.2022,arc2020EXCR)
+arc2022EXCR$predicted.rates <- predict(model.2021,arc2022EXCR)
 
  arc2020EXCR %>% 
-  ggplot(aes(x=Timestamp.Rates))+
+  ggplot(aes(x=timestamp.rates))+
   geom_point(aes(y=predicted.rates),color=pal[4])+
-  geom_point(aes(y=Rates.ES),color=pal[2])+
+  geom_point(aes(y=rates.es),color=pal[2])+
   basic_theme+
   labs(x="Date",y="Respiration Rates")
+ 
+ arc2022EXCR %>% 
+   ggplot(aes(x=timestamp.rates))+
+   geom_point(aes(y=predicted.rates),color=pal[4])+
+   geom_point(aes(y=rates.es),color=pal[2])+
+   basic_theme+
+   labs(x="Date",y="Respiration Rates")
+ 
 
  ### pivot longer to transpose data
  ### github repository for ARCs data
