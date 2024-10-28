@@ -1,0 +1,83 @@
+---
+title: "fouling test second swap 062024"
+author: "Anna Mudahy"
+date: "2024-10-07"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r packages}
+
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(broom)
+```
+
+
+```{r load files and functions}
+
+full.swap <- read_excel("C:/Users/hunte/Desktop/R projects/ARCs/Raw data/ES_060524 full cleaned.xlsx",sheet = "Sheet1") %>% 
+  mutate(datetime.2= as.POSIXct(paste(datetime),tz="America/New_York")) %>% 
+  select(-datetime) %>% 
+  rename(datetime=datetime.2)
+
+second.swap <- read_excel("C:/Users/hunte/Desktop/R projects/ARCs/Raw data/ES_061324_cleaned.xlsx",sheet = "Sheet1") %>% 
+  mutate(datetime.2= as.POSIXct(paste(datetime),tz="America/New_York")) %>% 
+  select(-datetime) %>% 
+  rename(datetime=datetime.2)
+
+#load("~/R data/ES060524.First.swap.Rdata")
+
+#source("ARC data Processing Functions.R")
+```
+
+gonna label all NA's as incubating in start point column and rename column to status
+
+```{r fixing status col}
+full.swap <- full.swap %>%
+  replace_na(.,list(status="i")) %>% 
+  mutate(status=ifelse(status=="s","flushing","incubating"))
+
+second.swap <- second.swap %>%
+  replace_na(.,list(status="i")) %>% 
+  mutate(status=ifelse(status=="s","flushing","incubating"))
+
+
+```
+
+
+```{r calc rates for full deployment}
+full.swap <- assign.incubation(full.swap)
+
+full.swap.rates <- calculate_slope(full.swap)
+```
+
+```{r calc rates for second swap deployment}
+second.swap <- assign.incubation(second.swap)
+
+second.swap.rates <- calculate_slope(second.swap)
+```
+
+```{r save files}
+ES060524.Full.deployment <- full.swap.rates
+
+ES061324.second.swap <- second.swap.rates
+
+#save(ES060524.Full.deployment, file = here("R data", "ES060524.Full.deployment.Rdata" ))
+#save(ES061324.second.swap, file = here("R data", "ES061324.second.swap.Rdata" ))
+
+
+```
+

@@ -1,0 +1,93 @@
+---
+title: "fouling test 091124 analysis"
+author: "Anna Mudahy"
+date: "2024-10-28"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+```{r packages}
+
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(broom)
+library(wesanderson)
+library(zoo)
+
+pal <- wes_palette("Zissou1",5,type="discrete")
+basic_theme <- theme(panel.grid=element_blank(),
+                     axis.text =  element_text(size=14),
+                     strip.text = element_text(size=14),
+                     axis.title = element_text(size=14)
+)
+```
+
+
+```{r load files and functions}
+
+load("R data/ES091124.Full.deployment.overlap.Rdata")
+load("R data/ES092724.Rdata")
+
+
+```
+
+```{r}
+#merging all three chamber data
+ES091124.Full.deployment.overlap <- ES091124.Full.deployment.overlap %>% 
+  mutate(deployment="full")
+ES092724 <- ES092724 %>% 
+  mutate(deployment="second")
+
+fouling.all <- rbind(ES091124.Full.deployment.overlap,ES092724)
+ 
+# calculating 3 point running avg of rates 
+fouling.all <- fouling.all %>% 
+  filter(rate<0) %>% 
+  group_by(deployment) %>% 
+  mutate(rolling.avg.3=rollmean(rate, k = 3, fill = NA, align = "right")) %>% 
+  ungroup()
+
+#saving fouling data to export for csv
+
+#write.csv(fouling.all,file = "Fouling test September 2024 EXCR-S.csv")
+
+```
+
+
+```{r graph each data set}
+## plot first raw data
+fouling.all %>% 
+  ggplot(aes(x=datetime,y=rate, colour = deployment))+
+  #facet_wrap(~deployment)+
+  geom_point()+
+  geom_line()+
+  basic_theme+
+  labs(x="",y="Respiration Rate")
+
+### plot running averaged rates
+
+fouling.all %>% 
+  ggplot(aes(x=datetime,y=rolling.avg.3, colour = deployment))+
+  #facet_wrap(~deployment)+
+  geom_point()+
+  geom_line()+
+  basic_theme+
+  labs(x="",y="Respiration Rate Avgd")
+
+
+
+```
+
