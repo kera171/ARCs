@@ -21,26 +21,29 @@ When you click the **Knit** button a document will be generated that includes bo
 ```{r packages}
 
 library(tidyverse)
-library(lubridate)
 library(readxl)
 library(broom)
 library(wesanderson)
 library(zoo)
+library(bayesbio)
+library(patchwork)
 
 pal <- wes_palette("Zissou1",5,type="discrete")
 basic_theme <- theme(panel.grid=element_blank(),
                      axis.text =  element_text(size=14),
                      strip.text = element_text(size=14),
-                     axis.title = element_text(size=14)
+                     axis.title = element_text(size=14),
+                     legend.title.text = element_text(size=12),
+                     legend.text = element_text(size=12)
 )
 ```
 
 
 ```{r load files and functions}
 
-load("R data/ES060524.First.swap.Rdata")
-load("R data/ES061324.second.swap.Rdata")
-load("R data/ES060524.Full.deployment.Rdata")
+load("R data/Rdata files/ES060524.First.swap.Rdata")
+load("R data/Rdata files/ES061324.second.swap.Rdata")
+load("R data/Rdata files/ES060524.Full.deployment.Rdata")
 
 ```
 
@@ -53,10 +56,10 @@ ES060524.First.swap <- ES060524.First.swap %>%
 ES061324.second.swap <- ES061324.second.swap %>% 
   mutate(deployment="second")
 
-fouling.all <- rbind(ES060524.Full.deployment,ES060524.First.swap,ES061324.second.swap)
+fouling.all.june <- rbind(ES060524.Full.deployment,ES060524.First.swap,ES061324.second.swap)
  
 # calculating 3 point running avg of rates 
-fouling.all <- fouling.all %>% 
+fouling.all.june.avg <- fouling.all.june %>% 
   filter(rate<0) %>% 
   group_by(deployment) %>% 
   mutate(rolling.avg.3=rollmean(rate, k = 3, fill = NA, align = "right")) %>% 
@@ -64,24 +67,26 @@ fouling.all <- fouling.all %>%
 
 #saving fouling data to export for csv
 
-#write.csv(fouling.all,file = "Fouling test June 2024 EXCR-S.csv")
+#write.csv(fouling.all.june,file = "Fouling test June 2024 EXCR-S.csv")
 
 ```
 
 
 ```{r graph each data set}
 ## plot first raw data
-fouling.all %>% 
+fouling.all.june %>% 
   ggplot(aes(x=datetime,y=rate, colour = deployment))+
-  #facet_wrap(~deployment)+
   geom_point()+
   geom_line()+
+  theme_classic()+
   basic_theme+
-  labs(x="",y="Respiration Rate")
+  scale_x_datetime(date_breaks = "3 days")+
+  theme(legend.position="bottom")+
+  labs(x="",y="Respiration Rate (mmol O2/m3/hr)")
 
 ### plot running averaged rates
 
-fouling.all %>% 
+fouling.all.june %>% 
   ggplot(aes(x=datetime,y=rolling.avg.3, colour = deployment))+
   #facet_wrap(~deployment)+
   geom_point()+
@@ -89,6 +94,281 @@ fouling.all %>%
   basic_theme+
   labs(x="",y="Respiration Rate Avgd")
 
+#plot just the second half of full deployment and the 1st 1 week deployment
+fouling.all.june %>% 
+  filter(datetime<="2024-06-13 12:00:00") %>% 
+  ggplot(aes(x=datetime,y=rate, colour = deployment))+
+  #facet_wrap(~deployment)+
+  geom_point()+
+  #geom_line()+
+  scale_color_manual(values = c("green","red"))+
+  basic_theme+
+  labs(x="",y="Respiration Rate")
+
+#plot just the second half of full deployment and the 2nd 1 week deployment
+fouling.all.june %>% 
+  filter(datetime>="2024-06-13 12:00:00") %>% 
+  ggplot(aes(x=datetime,y=rate, colour = deployment))+
+  geom_point()+
+  geom_line()+
+  scale_color_manual(values = c("green","blue"))+
+  scale_x_datetime(date_breaks = "1 day")+
+  theme_classic()+
+  basic_theme+
+  theme(legend.position="bottom")+
+  labs(x="",y="Respiration Rate (mmol O2/m3/hr)")
+
+
+```
+
+### gonna do pairwise comparisons
+
+
+```{r }
+# filter 2 week deployment for just date and time so when i merge with other arc data the extra columns are not duplicated 
+full.filtered <- ES060524.Full.deployment %>% 
+  select(datetime,rate) %>% 
+  rename(datetime.2 = datetime,
+         rate.full = rate)
+
+
+rate.interp.1st <- nearestTime(df1 = ES060524.First.swap, df2 = full.filtered,
+                  timeCol1 = "datetime",timeCol2 = "datetime.2") 
+
+rate.interp.2nd <- nearestTime(df1 = ES061324.second.swap, df2 = full.filtered,
+                  timeCol1 = "datetime",timeCol2 = "datetime.2")
+
+ES060524.closest.time<- ES060524.First.swap %>%
+  select(datetime,rate) %>% 
+  mutate(rate=rate*-1,
+         rate.interp.1st = rate.interp.1st$rate.full*-1,
+         difference.1 = rate-rate.interp.1st,
+          normalized.diff=difference.1/rate)
+
+ES061324.closest.time<- ES061324.second.swap %>%
+  select(datetime,rate) %>% 
+  mutate(rate=rate*-1,
+         rate.interp.2nd = rate.interp.2nd$rate.full*-1,
+         difference.2= rate-rate.interp.2nd,
+         normalized.diff=difference.2/rate)
+
+#save(ES060524.closest.time,ES061324.closest.time,file = "R data/Rdata files/june.fouling.closest.time.Rdata")       
+         
+```
+
+
+```{r }
+#finding the mean of the differences for each paired deployments
+
+mean.diff.1 <- mean(ES060524.closest.time$difference.1,na.rm = TRUE)
+
+mean.diff.2 <- mean(ES061324.closest.time$difference.2,na.rm = TRUE)
+
+sd.diff.1 <- sd(ES060524.closest.time$difference.1,na.rm = TRUE)
+                                                            
+sd.diff.2 <- sd(ES061324.closest.time$difference.2,na.rm = TRUE)
+
+#getting the number of values that are not NA for each difference column
+
+n.diff.1 <- nrow(ES060524.closest.time[!is.na(ES060524.closest.time$difference.1), ])
+
+n.diff.2 <- nrow(ES061324.closest.time[!is.na(ES061324.closest.time$difference.2), ])
+
+#determining the critical value and the confidence intervals 
+
+
+cl.diff.1 <- c(mean.diff.1 + qt(0.025,n.diff.1-1)*sd.diff.1/sqrt(n.diff.1),
+               mean.diff.1 + qt(0.975,n.diff.1-1)*sd.diff.1/sqrt(n.diff.1))
+
+cl.diff.2 <- c(mean.diff.2 + qt(0.025,n.diff.2-1)*sd.diff.2/sqrt(n.diff.2),
+               mean.diff.2 + qt(0.975,n.diff.2-1)*sd.diff.2/sqrt(n.diff.2))
+
+
+```
+
+```{r normalized mean diffs }
+#finding the mean of the differences for each paired deployments
+
+mean.diff.1 <- mean(ES060524.closest.time$normalized.diff,na.rm = TRUE)
+
+mean.diff.2 <- mean(ES061324.closest.time$normalized.diff,na.rm = TRUE)
+
+sd.diff.1 <- sd(ES060524.closest.time$normalized.diff,na.rm = TRUE)
+                                                            
+sd.diff.2 <- sd(ES061324.closest.time$normalized.diff,na.rm = TRUE)
+
+#getting the number of values that are not NA for each difference column
+
+n.diff.1 <- nrow(ES060524.closest.time[!is.na(ES060524.closest.time$normalized.diff), ])
+
+n.diff.2 <- nrow(ES061324.closest.time[!is.na(ES061324.closest.time$normalized.diff), ])
+
+#determining the critical value and the confidence intervals 
+
+
+cl.diff.1 <- c(mean.diff.1 + qt(0.025,n.diff.1-1)*sd.diff.1/sqrt(n.diff.1),
+               mean.diff.1 + qt(0.975,n.diff.1-1)*sd.diff.1/sqrt(n.diff.1))
+
+cl.diff.2 <- c(mean.diff.2 + qt(0.025,n.diff.2-1)*sd.diff.2/sqrt(n.diff.2),
+               mean.diff.2 + qt(0.975,n.diff.2-1)*sd.diff.2/sqrt(n.diff.2))
+
+
+```
+
+
+```{r plot diff}
+
+#first week differences
+plt.1 <-ggplot()+
+  geom_ribbon(data = ES060524.closest.time,
+              aes(x=datetime,ymin = cl.diff.1[1],
+                            ymax=cl.diff.1[2]),
+              fill=pal[1],alpha=0.1)+
+  geom_point(data=ES060524.closest.time, aes(x=datetime,y=difference.1),colour=pal[1])+
+  geom_hline(yintercept = mean(ES060524.closest.time$difference.1, na.rm = TRUE),
+             colour=pal[1],linetype=2)+
+  geom_hline(yintercept = 0)+
+  theme_classic()+
+  basic_theme+
+  labs(x="",y="pairwise difference (mmol O2/m3/hr)")+
+  scale_x_datetime(date_breaks = "2 days",expand = c(0.02,0), limits = c(as.POSIXct("2024-06-07"),as.POSIXct("2024-06-13 12:00:00")),date_labels = "%b-%d")+
+  annotate("text",x = as.POSIXct("2024-06-07"), y= -4.26,
+           label = "Fresh ARC1aJun > Fresh ARC2Jun", hjust=0 )+
+   annotate("text",x = as.POSIXct("2024-06-07"), y= 2.7,
+           label = "Fresh ARC2Jun > Fresh ARC1aJun", hjust=0  )
+
+#2nd week differences
+plt.2 <-  ggplot()+
+  geom_ribbon(data = ES061324.closest.time,
+              aes(x=datetime,ymin = cl.diff.2[1],
+                            ymax=cl.diff.2[2]),
+              fill=pal[1],alpha=0.1)+
+  geom_point(data=ES061324.closest.time, aes(x=datetime,y=difference.2),colour=pal[1])+
+  geom_hline(yintercept = mean(ES061324.closest.time$difference.2,na.rm = TRUE),
+             colour=pal[1],linetype=2)+
+  geom_hline(yintercept = 0)+
+  theme_classic()+
+  basic_theme+
+  labs(x="",y="")+
+  scale_x_datetime(date_breaks = "2 days",expand = c(0.02,0), limits = c(as.POSIXct("2024-06-13 17:00:00"),as.POSIXct("2024-06-19 12:00:00")),date_labels = "%b-%d")  +
+  annotate("text",x = as.POSIXct("2024-06-13 17:00"), y= -4.6,
+           label =  "Aged ARC2Jun > Fresh ARC1bJun", hjust=0 )+
+   annotate("text",x = as.POSIXct("2024-06-13 17:00"), y= 3.5,
+           label = "Fresh ARC1bJun >  Aged ARC2Jun", hjust=0 )
+
+plt.1+plt.2+plot_layout(nrow = 1)+
+  plot_annotation(tag_levels = "a")
+
+
+```
+
+```{r testing if the mean difference is less than zero}
+
+t.test(ES060524.closest.time$difference.1,alternative = "less", conf.level = 0.95)
+
+t.test(ES060524.closest.time$difference.2,alternative = "less", conf.level = 0.95)
+
+t.test(ES061324.closest.time$rate,ES061324.closest.time$rate.interp.2nd, paired = TRUE, alternative = "two.sided", conf.level = 0.95, mu = 0)
+
+t.test(ES061324.closest.time$rate,ES061324.closest.time$rate.interp.2nd, paired = TRUE, alternative = "greater", conf.level = 0.95, mu = 0)
+
+```
+
+One Sample t-test
+
+data:  ES060524.closest.time$difference.1
+t = -1.6006, df = 29, p-value = 0.06015
+alternative hypothesis: true mean is less than 0
+95 percent confidence interval:
+       -Inf 0.01000209
+sample estimates:
+ mean of x 
+-0.1624723 
+
+One Sample t-test
+
+data:  ES060524.closest.time$difference.2
+t = -0.24086, df = 22, p-value = 0.4059
+alternative hypothesis: true mean is less than 0
+95 percent confidence interval:
+      -Inf 0.2653447
+sample estimates:
+  mean of x 
+-0.04329227 
+
+
+Paired t-test
+
+data:  ES060524.closest.time$full.rates and ES060524.closest.time$rate.interp.1st
+t = 1.6006, df = 29, p-value = 0.1203
+alternative hypothesis: true mean difference is not equal to 0
+95 percent confidence interval:
+ -0.04513416  0.37007881
+sample estimates:
+mean difference 
+      0.1624723 
+     
+     
+  Paired t-test
+
+data:  ES060524.closest.time$full.rates and ES060524.closest.time$rate.interp.2nd
+t = 0.24086, df = 22, p-value = 0.4059
+alternative hypothesis: true mean difference is greater than 0
+95 percent confidence interval:
+ -0.2653447        Inf
+sample estimates:
+mean difference 
+     0.04329227 
+
+###
+difference/fresh assuming fresh arc is giving 
+
+
+
+```{r plot normALIZED diff}
+
+#first week differences
+plt.1 <-ggplot()+
+  geom_ribbon(data = ES060524.closest.time,
+              aes(x=datetime,ymin = cl.diff.1[1],
+                            ymax=cl.diff.1[2]),
+              fill=pal[1],alpha=0.1)+
+  geom_point(data=ES060524.closest.time, aes(x=datetime,y=normalized.diff),colour=pal[1])+
+  geom_hline(yintercept = mean(ES060524.closest.time$normalized.diff, na.rm = TRUE),
+             colour=pal[1],linetype=2)+
+  geom_hline(yintercept = 0)+
+  theme_classic()+
+  basic_theme+
+   labs(x="",y= "")+
+   scale_y_discrete(limits = seq(-8,4.2,2))+
+  scale_x_datetime(date_breaks = "2 days",expand = c(0.02,0), limits = c(as.POSIXct("2024-06-07"),as.POSIXct("2024-06-13 12:00:00")),date_labels = "%b-%d")+
+  annotate("text",x = as.POSIXct("2024-06-07"), y= -6.3,
+           label = "Fresh ARC2Jun > Fresh ARC1aJun", hjust=0 )+
+   annotate("text",x = as.POSIXct("2024-06-07"), y= 4.2,
+           label = "Fresh ARC1aJun > Fresh ARC2Jun", hjust=0  )
+
+#2nd week differences
+plt.2 <-  ggplot()+
+  geom_ribbon(data = ES061324.closest.time,
+              aes(x=datetime,ymin = cl.diff.2[1],
+                            ymax=cl.diff.2[2]),
+              fill=pal[1],alpha=0.1)+
+  geom_point(data=ES061324.closest.time, aes(x=datetime,y=normalized.diff),colour=pal[1])+
+  geom_hline(yintercept = mean(ES061324.closest.time$normalized.diff,na.rm = TRUE),
+             colour=pal[1],linetype=2)+
+  geom_hline(yintercept = 0)+
+  theme_classic()+
+  basic_theme+
+  labs(x="",y="")+
+  scale_y_discrete(limits = seq(-8,4.2,2))+
+  scale_x_datetime(date_breaks = "2 days",expand = c(0.02,0), limits = c(as.POSIXct("2024-06-13 17:00:00"),as.POSIXct("2024-06-19 12:00:00")),date_labels = "%b-%d")  +
+  annotate("text",x = as.POSIXct("2024-06-13 17:00"), y= -6.3,
+           label =  "1 week aged ARC2Jun > Fresh ARC1bJun", hjust=0 )+
+   annotate("text",x = as.POSIXct("2024-06-13 17:00"), y= 4.2,
+           label = "Fresh ARC1bJun > 1 week aged ARC2Jun", hjust=0 )
+
+plt.1+plt.2+plot_layout(nrow = 1)+
+  plot_annotation(tag_levels = "a")
 
 
 ```

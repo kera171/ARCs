@@ -1,0 +1,189 @@
+---
+title: "Chi Square and other analysis for fouling test"
+author: "Anna Mudahy"
+date: "2024-11-27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+
+```{r packages}
+
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(broom)
+library(wesanderson)
+library(zoo)
+library(data.table)
+
+pal <- wes_palette("Zissou1",5,type="discrete")
+basic_theme <- theme(panel.grid=element_blank(),
+                     axis.text =  element_text(size=14),
+                     strip.text = element_text(size=14),
+                     axis.title = element_text(size=14)
+)
+```
+
+
+```{r load files and functions}
+#data from fouling test in June 2024
+load("R data/Rdata files/ES060524.First.swap.Rdata")
+load("R data/Rdata files/ES061324.second.swap.Rdata")
+load("R data/Rdata files/ES060524.Full.deployment.Rdata")
+
+#data from fouling test in September 2024
+load("R data/Rdata files/ES091124.Full.deployment.overlap.Rdata")
+load("R data/Rdata files/ES092724.Rdata")
+load("R data/Rdata files/ES091124 duplicate.Rdata")
+
+#data from fouling test in October 2024
+load("R data/Rdata files/fouling_test10_25_24.ARC1a_1st.Rdata")
+load("R data/Rdata files/fouling_test10_25_24.ARC1a_2nd.Rdata")
+load("R data/Rdata files/fouling_test10_25_24.ARC1b.Rdata")
+load("R data/Rdata files/fouling_test10_25_24.ARC2.Rdata")
+load("R data/Rdata files/fouling_test10_25_24.ARC3.Rdata")
+
+
+```
+
+
+
+```{r}
+# Function to find the closest datetime
+find_closest <- function(event_time, rate_times) {
+  rate_times[which.min(abs(difftime(rate_times, event_time, units = "secs")))]
+}
+
+```
+
+
+```{r merging june}
+#merging all three chamber data
+ES060524.Full.deployment <- ES060524.Full.deployment %>% 
+  mutate(deployment="full")
+ES060524.First.swap <- ES060524.First.swap %>% 
+  mutate(deployment="first")
+ES061324.second.swap <- ES061324.second.swap %>% 
+  mutate(deployment="second")
+
+fouling.all.june <- rbind(ES060524.Full.deployment,ES060524.First.swap,ES061324.second.swap)
+
+fouling.all.june %>% 
+  ggplot(aes(x=datetime,y=rate, colour = deployment))+
+  #facet_wrap(~deployment)+
+  geom_point()+
+  geom_line()+
+  basic_theme+
+  labs(x="",y="Respiration Rate")
+
+```
+
+```{r finding closest rates for june fouling}
+# have to set up data for chi analysis
+ES060524.Full.datetime <- ES060524.Full.deployment %>% 
+  select(datetime)
+
+first.second.june <- rbind(ES060524.First.swap,ES061324.second.swap)
+
+# Apply the function to match each event with the closest rate
+ES060524.closest.time <- ES060524.Full.datetime %>%
+  rowwise() %>%
+  mutate(closest_rate_time = find_closest(datetime, first.second.june$datetime)) %>%
+  left_join(first.second.june, by = c("closest_rate_time" = "datetime"))
+
+ES060524.closest.time$full.rates <- ES060524.Full.deployment$rate
+
+
+```
+
+
+```{r}
+chi.test.june.data <- ES060524.closest.time %>% 
+  select(datetime,rate,full.rates) %>%
+  rename(duplicate.rates=rate)
+
+chi.test.june <- chisq.test(x=chi.test.june.data$duplicate.rates,y=chi.test.june.data$full.rates)
+
+chi.test.june
+
+```
+
+Pearson's Chi-squared test
+
+data:  chi.test.june.data$duplicate.rates and chi.test.june.data$full.rates
+X-squared = 3080, df = 3025, p-value = 0.2384
+
+
+```{r finding closest rates for september fouling}
+# have to select datetime from overlapped deployment
+ES091124.Full.datetime <- ES091124.Full.deployment.overlap %>% 
+  select(datetime)
+
+first.second.september <- rbind(ES091124.duplicate,ES092724)
+
+# Apply the function to match each event with the closest rate
+ES091124.closest.time <- ES091124.Full.datetime %>%
+  rowwise() %>%
+  mutate(closest_rate_time = find_closest(datetime, first.second.september$datetime)) %>%
+  left_join(first.second.september, by = c("closest_rate_time" = "datetime"))
+
+
+ES091124.closest.time$full.rates <- ES091124.Full.deployment.overlap$rate
+
+
+```
+
+
+```{r}
+chi.test.september.data <- ES091124.closest.time %>% 
+  select(datetime,rate,full.rates) %>%
+  rename(duplicate.rates=rate)
+
+chi.test.september <- chisq.test(x=chi.test.september.data$duplicate.rates,y=chi.test.september.data$full.rates)
+
+chi.test.september
+
+```
+
+Pearson's Chi-squared test
+
+data:  chi.test.september.data$duplicate.rates and chi.test.september.data$full.rates
+X-squared = 12320, df = 12210, p-value = 0.2401
+
+
+
+
+```{r}
+chi.test.september.first.half.data <- ES091124.closest.time %>% 
+  filter(between(datetime,"2024-09-11 12:05:00","2024-09-27 19:05:00")) %>% 
+  select(datetime,rate,full.rates) %>%
+  rename(duplicate.rates=rate) %>% 
+  filter(full.rates<0)
+
+ggplot(data=chi.test.september.first.half.data,aes(x=full.rates))+
+  geom_histogram()
+
+chi.test.september.first.half <- chisq.test(x=chi.test.september.first.half.data$duplicate.rates,y=chi.test.september.first.half.data$full.rates)
+
+chi.test.september.first.half
+```
+
+Pearson's Chi-squared test
+
+data:  chi.test.september.data$duplicate.rates and chi.test.september.data$full.rates
+X-squared = 12320, df = 12210, p-value = 0.2401
+
+

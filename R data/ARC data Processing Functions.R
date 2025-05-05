@@ -17,7 +17,9 @@ assign.incubation <- function(mydata){
   return(df) }
 
 # calculate slopes from hobo data for each chamber----------------------------------------------
-
+#** The time zone used in the function for calculating the datetime is set to UTC 
+#but the real time zone is America/New York...R kept converting the time four hours behind 
+#so to keep time constant I put UTC
 calculate_slope <- function(mydata) {
   
   df <- mydata %>% 
@@ -27,7 +29,7 @@ calculate_slope <- function(mydata) {
   slopes.o2.calc$slope <- NA
   slopes.o2.calc$rsq <- NA
   slopes.o2.calc$n <- NA
-  slopes.o2.calc$datetime <- as.POSIXct("1899-01-01 04:58:59",tz="America/New_York")
+  slopes.o2.calc$datetime <- as.POSIXct.default("1899-01-01 04:58:59", tz="UTC")
   slopes.o2.calc$incubation.duration <- NA
   slopes.o2.calc$slope.se <- NA
   for (i in 1:nrow(slopes.o2.calc)){
@@ -52,12 +54,12 @@ calculate_slope <- function(mydata) {
   return(slopes.o2.calc)
 }
 
-# graphing figure for rates--------------------------------------------
+# graphing figure for rates must copy and paste this in to code to change the name pf file------------
 graph.figures.rates <-  function(mydata){
   
   incubations <- unique(mydata$incubation.number[!is.na(mydata$incubation.number)])
   
-  pdf(file = paste0("Figures/Figures(EXCR-S Fouling Test 1 ", format(mydata$datetime[1],format = "%Y-%m-%d" ),").pdf"), 
+  pdf(file = paste0("R data/Figures/Figures", format(mydata$datetime[1],format = "%Y-%m-%d" ),").pdf"), 
       width = 6, 
       height = 6,
       paper = "letter")

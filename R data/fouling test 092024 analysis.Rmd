@@ -26,20 +26,26 @@ library(readxl)
 library(broom)
 library(wesanderson)
 library(zoo)
+library(patchwork)
+library(fuzzyjoin)
+library(bayesbio)
 
 pal <- wes_palette("Zissou1",5,type="discrete")
 basic_theme <- theme(panel.grid=element_blank(),
                      axis.text =  element_text(size=14),
                      strip.text = element_text(size=14),
-                     axis.title = element_text(size=14)
+                     axis.title = element_text(size=14),
+                     legend.title.text = element_text(size=12),
+                     legend.text = element_text(size=12)
 )
 ```
 
 
 ```{r load files and functions}
 
-load("R data/ES091124.Full.deployment.overlap.Rdata")
-load("R data/ES092724.Rdata")
+load("R data/Rdata files/ES091124.Full.deployment.overlap.Rdata")
+load("R data/Rdata files/ES092724.Rdata")
+load("R data/Rdata files/ES091124 duplicate.Rdata")
 
 
 ```
@@ -50,11 +56,13 @@ ES091124.Full.deployment.overlap <- ES091124.Full.deployment.overlap %>%
   mutate(deployment="full")
 ES092724 <- ES092724 %>% 
   mutate(deployment="second")
+ES091124.duplicate <- ES091124.duplicate %>% 
+  mutate(deployment="duplicate")
 
-fouling.all <- rbind(ES091124.Full.deployment.overlap,ES092724)
+fouling.all.september <- rbind(ES091124.Full.deployment.overlap,ES092724,ES091124.duplicate)
  
 # calculating 3 point running avg of rates 
-fouling.all <- fouling.all %>% 
+fouling.all.september.avg <- fouling.all.september %>% 
   filter(rate<0) %>% 
   group_by(deployment) %>% 
   mutate(rolling.avg.3=rollmean(rate, k = 3, fill = NA, align = "right")) %>% 
@@ -68,18 +76,41 @@ fouling.all <- fouling.all %>%
 
 
 ```{r graph each data set}
-## plot first raw data
-fouling.all %>% 
+## plot raw data
+fouling.all.september %>% 
+  filter(rate<0) %>% 
+  ggplot(aes(x=datetime,y=rate, colour = deployment))+
+  geom_point()+
+  geom_line()+
+  theme_classic()+
+  basic_theme+
+  theme(legend.position="bottom")+
+  labs(x="",y="Respiration Rate (mmol O2/m3/hr)")
+#plot just the second half of full deployment and the 2nd 2 week deployment
+fouling.all.september %>% 
+  filter(datetime>="2024-09-27 18:00:00") %>% 
   ggplot(aes(x=datetime,y=rate, colour = deployment))+
   #facet_wrap(~deployment)+
   geom_point()+
-  geom_line()+
-  basic_theme+
+  #geom_line()+
+  scale_color_manual(values = c("green","blue"))+
+  theme_classic()+
+  labs(x="",y="Respiration Rate")
+
+#plot just the first half of full deployment and the 1st 2 week deployment
+fouling.all.september %>% 
+  filter(datetime<"2024-09-27 06:00:00") %>% 
+  ggplot(aes(x=datetime,y=rate, colour = deployment))+
+  #facet_wrap(~deployment)+
+  geom_point()+
+  #geom_line()+
+  scale_color_manual(values = c("red","green"))+
+  theme_classic()+
   labs(x="",y="Respiration Rate")
 
 ### plot running averaged rates
 
-fouling.all %>% 
+fouling.all.september %>% 
   ggplot(aes(x=datetime,y=rolling.avg.3, colour = deployment))+
   #facet_wrap(~deployment)+
   geom_point()+
@@ -87,7 +118,332 @@ fouling.all %>%
   basic_theme+
   labs(x="",y="Respiration Rate Avgd")
 
+```
+
+
+### gonna do pairwise comparisons
+
+```{r }
+
+## gonna match ARC1 to ARC 4 weeks
+full.filtered <- ES091124.Full.deployment.overlap%>% 
+                          select(datetime,rate) %>% 
+                          rename(datetime.2=datetime,
+                                 rate.2=rate)
+
+rate.interp.1st.2week <- nearestTime(df1 = ES091124.duplicate, df2 = full.filtered, timeCol1 = "datetime",timeCol2 = "datetime.2")
+colnames(rate.interp.1st.2week)[12] <- c("rate.full")
+
+rate.interp.2nd.2week <- nearestTime(df1 = ES092724, df2 = full.filtered, timeCol1 = "datetime",timeCol2 = "datetime.2")
+colnames(rate.interp.2nd.2week)[12] <- c("rate.full")
+
+ES091124.closest.time<- ES091124.duplicate %>%
+  select(datetime,rate) %>% 
+  mutate(rate=rate*-1,
+         rate.interp.1st=rate.interp.1st.2week$rate.full*-1,
+         difference.1=-rate-rate.interp.1st)
+
+ES092724.closest.time<- ES092724 %>%
+  select(datetime,rate) %>% 
+  mutate(rate=rate*-1,
+         rate.interp.2nd=rate.interp.2nd.2week$rate.full*-1,
+         difference.2= rate-rate.interp.2nd,
+         normalized.diff=difference.2/rate)
+
+#save(ES092724.closest.time,file = "R data/Rdata files/ES092724.closest.time.Rdata")
+  
+  
+
+```
+
+```{r}
+#finding the mean of the differences for each paired deployments
+
+mean.diff.1.sep <- mean(ES091124.closest.time$difference.1,na.rm = TRUE)
+
+mean.diff.2.sep <- mean(ES092724.closest.time$normalized.diff,na.rm = TRUE)
+
+sd.diff.1.sep <- sd(ES091124.closest.time$difference.1,na.rm = TRUE)
+
+sd.diff.2.sep <- sd(ES092724.closest.time$normalized.diff,na.rm = TRUE)
+
+#getting the number of values that are not NA for each difference column
+
+n.diff.1.sep <- nrow(ES091124.closest.time[!is.na(ES091124.closest.time$difference.1), ])
+
+n.diff.2.sep <- nrow(ES092724.closest.time[!is.na(ES092724.closest.time$normalized.diff), ])
+
+#determining the critical value and the confidence intervals 
+
+
+cl.diff.1.sep <- c(mean.diff.1.sep + qt(0.025,n.diff.1.sep-1)*sd.diff.1.sep/sqrt(n.diff.1.sep),
+               mean.diff.1.sep + qt(0.975,n.diff.1.sep-1)*sd.diff.1.sep/sqrt(n.diff.1.sep))
+
+cl.diff.2.sep <- c(mean.diff.2.sep + qt(0.025,n.diff.2.sep-1)*sd.diff.2.sep/sqrt(n.diff.2.sep),
+               mean.diff.2.sep + qt(0.975,n.diff.2.sep-1)*sd.diff.2.sep/sqrt(n.diff.2.sep))
 
 
 ```
 
+
+
+```{r}
+ggplot()+
+  geom_ribbon(data = ES091124.closest.time,
+              aes(x=datetime,ymin = cl.diff.1.sep[1],
+                            ymax=cl.diff.1.sep[2]),
+              fill=pal[5],alpha=0.1)+
+  geom_ribbon(data = ES091124.closest.time,
+              aes(x=datetime,ymin = cl.diff.2.sep[1],
+                            ymax=cl.diff.2.sep[2]),
+              fill=pal[1],alpha=0.1)+
+  geom_point(data=ES091124.closest.time, aes(x=datetime,y=difference.1),colour=pal[5])+
+  geom_hline(yintercept = mean(ES091124.closest.time$difference.1, na.rm = TRUE),
+             colour=pal[5],linetype=2)+
+  geom_point(data=ES091124.closest.time, aes(x=datetime,y=difference.2),colour=pal[1])+
+  geom_hline(yintercept = mean(ES091124.closest.time$difference.2,na.rm = TRUE),
+             colour=pal[1],linetype=2)+
+geom_hline(yintercept = 0)+
+  theme_classic()+
+ labs(x="",y="pairwise difference (mmol O2/m3/hr)")+
+  scale_x_datetime(date_breaks = "4 days",expand = c(0,0))+
+  annotate("text",x = as.POSIXct("2024-09-13"), y= -8.6,
+           label = "1.5 week Clean ARC/Sensor > 4 week old ARC/Sensor ", hjust=0 )+
+   annotate("text",x = as.POSIXct("2024-09-13"), y= 5.6,
+           label = "4 week old ARC/Sensor > 1.5 wk Clean ARC/Sensor", hjust=0  )
+```
+
+
+```{r}
+# second half difference
+
+plt.5 <- ggplot()+
+  geom_ribbon(data = ES092724.closest.time,
+              aes(x=datetime,ymin = cl.diff.2.sep[1],
+                            ymax=cl.diff.2.sep[2]),
+              fill=pal[1],alpha=0.1)+
+  geom_point(data=ES092724.closest.time,aes(x=datetime,y=normalized.diff),colour=pal[1])+
+  geom_hline(yintercept = mean(ES092724.closest.time$normalized.diff,na.rm = TRUE),
+             colour=pal[1],linetype=2)+
+  geom_hline(yintercept = 0)+
+  theme_classic()+
+  basic_theme+
+  theme(axis.text.x = element_text(margin = margin (r=-2)))+
+  labs(x="",y="")+
+  scale_x_datetime(date_breaks = "4 days",expand =c(0,7000),date_labels = "%b-%d")+
+  annotate("text",x = as.POSIXct("2024-09-27 00:00:00"), y= -22,
+           label = "2.5 weeks aged ARC1aSep > Fresh ARC1bSep", hjust= -0.002 )+
+   annotate("text",x = as.POSIXct("2024-09-27 00:00:00"), y= 5.6,
+           label = "Fresh ARC1bSep > 2.5 weeks aged ARC1aSep", hjust= -0.002 )
+
+  
+  
+## percent difference of the mean rate for 97.5 and 95 confidence interval
+
+  
+
+```
+
+```{r}
+#finding the mean of the differences for each paired deployments
+
+ES091124.closest.time.woutliers <- ES091124.closest.time %>% 
+  filter(difference.1>-2.5)
+
+ES092724.closest.time.woutliers <- ES092724.closest.time %>% 
+  filter(difference.2>-2.5)
+
+mean.diff.1.sep.woutliers <- mean(ES091124.closest.time.woutliers$difference.1,na.rm = TRUE)
+
+mean.diff.2.sep.woutliers <- mean(ES092724.closest.time.woutliers$difference.2,na.rm = TRUE)
+
+sd.diff.1.sep.woutliers <- sd(ES091124.closest.time.woutliers$difference.1,na.rm = TRUE)
+
+sd.diff.2.sep.woutliers <- sd(ES092724.closest.time.woutliers$difference.2,na.rm = TRUE)
+
+#getting the number of values that are not NA for each difference column
+
+n.diff.1.sep.woutliers <- nrow(ES091124.closest.time.woutliers[!is.na(ES091124.closest.time.woutliers$difference.1), ])
+
+n.diff.2.sep.woutliers <- nrow(ES092724.closest.time.woutliers[!is.na(ES092724.closest.time.woutliers$difference.2), ])
+
+#determining the critical value and the confidence intervals 
+
+
+cl.diff.1.sep.woutliers <- c(mean.diff.1.sep.woutliers + qt(0.025,n.diff.1.sep.woutliers-1)*sd.diff.1.sep.woutliers/sqrt(n.diff.1.sep.woutliers),
+               mean.diff.1.sep.woutliers + qt(0.975,n.diff.1.sep.woutliers-1)*sd.diff.1.sep.woutliers/sqrt(n.diff.1.sep.woutliers))
+
+cl.diff.2.sep.woutliers <- c(mean.diff.2.sep.woutliers + qt(0.025,n.diff.2.sep.woutliers-1)*sd.diff.2.sep.woutliers/sqrt(n.diff.2.sep.woutliers),
+               mean.diff.2.sep.woutliers + qt(0.975,n.diff.2.sep.woutliers-1)*sd.diff.2.sep.woutliers/sqrt(n.diff.2.sep.woutliers))
+
+
+```
+
+
+```{r}
+# second half difference without the high mean diffs
+
+ggplot()+
+  geom_ribbon(data = ES092724.closest.time.woutliers,
+              aes(x=datetime,ymin = cl.diff.2.sep.woutliers[1],
+                            ymax=cl.diff.2.sep.woutliers[2]),
+              fill=pal[3],alpha=0.1)+
+  geom_point(data=ES092724.closest.time.woutliers,aes(x=datetime,y=difference.2),colour=pal[3])+
+  geom_hline(yintercept = mean(ES092724.closest.time.woutliers$difference.2,na.rm = TRUE),
+             colour=pal[3],linetype=2)+
+  geom_hline(yintercept = 0)+
+  theme_classic()+
+  basic_theme+
+  theme(axis.text.x = element_text(margin = margin (r=-2)))+
+  labs(x="",y="pairwise difference (mmol O2/m3/hr)")+
+  scale_x_datetime(date_breaks = "2.5 days",expand =c(0,7000),date_labels = "%b-%d")+
+  annotate("text",x = as.POSIXct("2024-09-27 00:00:00"), y= -9.4,
+           label = "Aged ARC1aSep >  Fresh ARC1bSep/Sensor", hjust= -0.05 )+
+   annotate("text",x = as.POSIXct("2024-09-27 00:00:00"), y= 5.6,
+           label = "ARC1bSep/Sensor > ARC1aSep/Sensor", hjust= -0.05 )
+
+  
+  
+## percent difference of the mean rate for 97.5 and 95 confidence interval
+
+
+
+```
+
+
+```{r}
+# second half difference without the high mean diffs and with
+
+ggplot()+
+  geom_ribbon(data = ES092724.closest.time,
+              aes(x=datetime,ymin = cl.diff.2.sep[1],
+                            ymax=cl.diff.2.sep[2]),
+              fill=pal[1],alpha=0.1)+
+  geom_point(data=ES092724.closest.time,aes(x=datetime,y=difference.2),colour=pal[1])+
+  geom_hline(yintercept = mean(ES092724.closest.time$difference.2,na.rm = TRUE),
+             colour=pal[1],linetype=2)+
+  geom_hline(yintercept = 0)+
+  geom_ribbon(data = ES092724.closest.time.woutliers,
+              aes(x=datetime,ymin = cl.diff.2.sep.woutliers[1],
+                            ymax=cl.diff.2.sep.woutliers[2]),
+              fill=pal[3],alpha=0.1)+
+  geom_point(data=ES092724.closest.time.woutliers,aes(x=datetime,y=difference.2),colour=pal[3])+
+  geom_hline(yintercept = mean(ES092724.closest.time.woutliers$difference.2,na.rm = TRUE),
+             colour=pal[3],linetype=2)+
+  geom_hline(yintercept = 0)+
+  theme_classic()+
+  basic_theme+
+  theme(axis.text.x = element_text(margin = margin (r=-2)))+
+  labs(x="",y="pairwise difference (mmol O2/m3/hr)")+
+  scale_x_datetime(date_breaks = "2.5 days",expand =c(0,7000),date_labels = "%b-%d")+
+  annotate("text",x = as.POSIXct("2024-09-27 00:00:00"), y= -9.4,
+           label = "Aged ARC1aSep >  Fresh ARC1bSep/Sensor", hjust= -0.02 )+
+   annotate("text",x = as.POSIXct("2024-09-27 00:00:00"), y= 5.6,
+           label = "ARC1bSep/Sensor > ARC1aSep/Sensor", hjust= -0.02 )
+
+  
+  
+## percent difference of the mean rate for 97.5 and 95 confidence interval
+
+
+
+```
+
+
+median(ES091124.closest.time$difference.2)
+[1] NA
+> median(ES091124.closest.time$difference.2,na.rm = TRUE)
+[1] -0.216585
+> mean(ES091124.closest.time$rate.interp.2nd)
+[1] NA
+> mean(ES091124.closest.time$rate.interp.2nd,na.rm=TRUE)
+[1] 1.625343
+> 0.21*100/1.625
+[1] 12.92308
+
+
+
+```{r testing if the mean difference is less than zero}
+
+t.test(ES091124.closest.time$difference.1,alternative = "less", conf.level = 0.95)
+
+t.test(ES091124.closest.time$difference.2,alternative = "less", conf.level = 0.95)
+
+t.test(ES091124.closest.time.filtered$difference.2,alternative = "less", conf.level = 0.95)
+
+t.test(ES091124.closest.time$full.rates,ES091124.closest.time$rate.interp.1st, paired = TRUE, alternative = "two.sided", conf.level = 0.95, mu = 0)
+
+t.test(ES092724.closest.time$rate.interp.2nd,ES092724.closest.time$rate, paired = TRUE, alternative = "greater", conf.level = 0.95, mu = 0)
+
+t.test(ES091124.closest.time.filtered$full.rates,ES091124.closest.time.filtered$rate.interp.2nd, paired = TRUE, alternative = "greater", conf.level = 0.95, mu = 0)
+
+```
+
+
+One Sample t-test
+
+data:  ES091124.closest.time$difference.1
+t = -4.9918, df = 63, p-value = 2.503e-06
+alternative hypothesis: true mean is less than 0
+95 percent confidence interval:
+       -Inf -0.9457102
+sample estimates:
+mean of x 
+-1.420898 
+
+
+One Sample t-test
+
+data:  ES091124.closest.time$difference.2
+t = -2.3997, df = 45, p-value = 0.01031
+alternative hypothesis: true mean is less than 0
+95 percent confidence interval:
+       -Inf -0.2534747
+sample estimates:
+ mean of x 
+-0.8445261 
+
+One Sample t-test
+
+data:  ES091124.closest.time.filtered$difference.2
+t = 0.1332, df = 38, p-value = 0.5526
+alternative hypothesis: true mean is less than 0
+95 percent confidence interval:
+      -Inf 0.2245529
+sample estimates:
+ mean of x 
+0.01644243 
+
+Paired t-test
+
+data:  ES091124.closest.time$full.rates and ES091124.closest.time$rate.interp.1st
+t = 4.9918, df = 63, p-value = 5.006e-06
+alternative hypothesis: true mean difference is not equal to 0
+95 percent confidence interval:
+ 0.8520794 1.9897172
+sample estimates:
+mean difference 
+       1.420898 
+       
+       
+Paired t-test
+
+data:  ES091124.closest.time$full.rates and ES091124.closest.time$rate.interp.2nd
+t = 2.3997, df = 45, p-value = 0.01031
+alternative hypothesis: true mean difference is greater than 0
+95 percent confidence interval:
+ 0.2534747       Inf
+sample estimates:
+mean difference 
+      0.8445261 
+
+Paired t-test
+
+data:  ES091124.closest.time.filtered$full.rates and ES091124.closest.time.filtered$rate.interp.2nd
+t = -0.1332, df = 38, p-value = 0.5526
+alternative hypothesis: true mean difference is greater than 0
+95 percent confidence interval:
+ -0.2245529        Inf
+sample estimates:
+mean difference 
+    -0.01644243 

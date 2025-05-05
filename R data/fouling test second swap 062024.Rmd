@@ -28,19 +28,19 @@ library(broom)
 
 ```{r load files and functions}
 
-full.swap <- read_excel("C:/Users/hunte/Desktop/R projects/ARCs/Raw data/ES_060524 full cleaned.xlsx",sheet = "Sheet1") %>% 
+full.swap <- read_excel("Raw data/ES_060524 full cleaned.xlsx",sheet = "Sheet1") %>% 
   mutate(datetime.2= as.POSIXct(paste(datetime),tz="America/New_York")) %>% 
   select(-datetime) %>% 
   rename(datetime=datetime.2)
 
-second.swap <- read_excel("C:/Users/hunte/Desktop/R projects/ARCs/Raw data/ES_061324_cleaned.xlsx",sheet = "Sheet1") %>% 
+second.swap <- read_excel("Raw data/ES_061324_cleaned.xlsx",sheet = "Sheet1") %>% 
   mutate(datetime.2= as.POSIXct(paste(datetime),tz="America/New_York")) %>% 
   select(-datetime) %>% 
   rename(datetime=datetime.2)
 
 #load("~/R data/ES060524.First.swap.Rdata")
 
-#source("ARC data Processing Functions.R")
+source("R data/ARC data Processing Functions.R")
 ```
 
 gonna label all NA's as incubating in start point column and rename column to status

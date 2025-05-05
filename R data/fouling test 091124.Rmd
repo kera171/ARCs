@@ -27,16 +27,14 @@ library(broom)
 
 
 ```{r load files and functions}
+Sys.setenv(TZ="EST")
 
-full.swap.test <- read_excel("C:/Users/hunte/Desktop/R projects/ARCs/Raw data/ES_091124_cleaned overlap.xlsx",sheet = "cleaned") %>%
-mutate(datetime.2= as.POSIXct(paste(datetime),tz="America/New_York")) %>% 
-  select(-datetime) %>% 
-  rename(datetime=datetime.2)
+full.swap <- read_excel("Raw data/ES_091124_cleaned overlap.xlsx",sheet = "cleaned") 
 
-second.swap <- read_excel("C:/Users/hunte/Desktop/R projects/ARCs/Raw data/ES_092724_cleaned.xlsx") %>% 
-  mutate(datetime.2= as.POSIXct(paste(datetime),tz="America/New_York")) %>% 
-   select(do.mgl,temp,status,datetime.2) %>% 
-  rename(datetime=datetime.2)
+duplicate.swap <- read_excel("Raw data/ES_091124_cleaned.xlsx", sheet = "clean") 
+
+second.swap <- read_excel("Raw data/ES_092724_cleaned.xlsx")
+
 
 
 source("R data/ARC data Processing Functions.R")
@@ -46,12 +44,19 @@ gonna label all NA's as incubating in status column
 
 ```{r fixing status col}
 full.swap <- full.swap %>%
-  replace_na(.,list(status="i")) %>% 
-  mutate(status=ifelse(status=="s","flushing","incubating"))
+  replace_na(.,list(status="i")) %>%
+  mutate(status=ifelse(status=="s","flushing","incubating")) %>% 
+  na.omit()
+
+duplicate.swap <- duplicate.swap %>%
+  replace_na(.,list(status="i")) %>%
+  mutate(status=ifelse(status=="s","flushing","incubating")) %>% 
+  na.omit()
 
 second.swap <- second.swap %>%
   replace_na(.,list(status="i")) %>% 
-  mutate(status=ifelse(status=="s","flushing","incubating"))
+  mutate(status=ifelse(status=="s","flushing","incubating")) %>% 
+  na.omit()
 
 
 ```
@@ -59,40 +64,6 @@ second.swap <- second.swap %>%
 
 ```{r calc rates for full deployment}
 full.swap <- assign.incubation(full.swap)
-
-calculate_slope <- function(mydata) {
-  
-  df <- full.swap %>% 
-    filter(!is.na(incubation.number))
-  slopes.o2.calc <- data.frame(
-    incubation.number=unique(df$incubation.number))
-  slopes.o2.calc$slope <- NA
-  slopes.o2.calc$rsq <- NA
-  slopes.o2.calc$n <- NA
-  slopes.o2.calc$datetime <- as.POSIXct("1899-01-01 04:58:59",tz="America/New_York")
-  slopes.o2.calc$incubation.duration <- NA
-  slopes.o2.calc$slope.se <- NA
-  for (i in 1:5(slopes.o2.calc)){
-    df.segment <- df %>% 
-      filter(incubation.number==slopes.o2.calc$incubation.number[1]) 
-    df.segment <- df.segment %>%  
-      mutate(elapsed.time=as.numeric(datetime-df.segment$datetime[1])/3600)
-    slopes.o2.calc$incubation.duration[1] <- df.segment$elapsed.time[nrow(df.segment)]
-    fit <- lm(do.mgl~elapsed.time, data = df.segment)
-    tmp <- broom::tidy(fit)
-    slopes.o2.calc$slope[i] <- fit$coefficients[2]
-    slopes.o2.calc$slope.se[i] <- tmp$std.error[2]
-    slopes.o2.calc$rsq[i] <- summary(fit)$r.squared
-    slopes.o2.calc$n[i] <- nrow(df.segment)
-    slopes.o2.calc$datetime[i] <- df.segment$datetime[1]
-  }
-  slopes.o2.calc <- slopes.o2.calc %>% 
-    mutate(rate=slope*1000/32,
-           rate.se=slope.se*1000/32,
-           rate.cv=abs(100*rate.se/rate))
-  
-  slopes.o2.calc
-}
 
 full.swap.rates <- calculate_slope(full.swap)
 ```
@@ -103,14 +74,125 @@ second.swap <- assign.incubation(second.swap)
 second.swap.rates <- calculate_slope(second.swap)
 ```
 
+```{r calc rates for duplicate swap deployment}
+duplicate.swap <- assign.incubation(duplicate.swap)
+
+duplicate.swap.rates <- calculate_slope(duplicate.swap)
+```
+
+
+
 ```{r save files}
 ES091124.Full.deployment.overlap <- full.swap.rates
 
 ES092724 <- second.swap.rates
 
+ES091124.duplicate <-duplicate.swap.rates 
+
 #save(ES091124.Full.deployment.overlap, file = "R data/ES091124.Full.deployment.overlap.Rdata" )
 #save(ES092724, file ="R data/ES092724.Rdata" )
+#save(ES091124.duplicate, file ="R data/ES091124 duplicate.Rdata" )
 
 
 ```
 
+```{r full swap figure}
+
+# graphing figures for rates--------------------------------------------
+graph.figures.rates <-  function(mydata){
+  
+  incubations <- unique(mydata$incubation.number[!is.na(mydata$incubation.number)])
+  
+  pdf(file = paste0("R data/Figures/Figures(EXCR-S Fouling Test 2 ", format(mydata$datetime[1],format = "%Y-%m-%d" ),").pdf"), 
+      width = 6, 
+      height = 6,
+      paper = "letter")
+  
+  for ( i in 1:length(incubations)){
+    df.segment <- mydata %>% 
+      filter(incubation.number==incubations[i])
+    plt <- ggplot( df.segment, aes(x=datetime,y=do.mgl))+
+      geom_point()+
+      geom_smooth(method = "lm")+
+      theme_classic()+
+      scale_x_datetime(date_breaks = "30 min",date_labels = "%H:%M")+
+      ylab("Dissolved Oygen (mg/L)")+
+      xlab("")+
+      ggtitle(paste("Incubation Number",incubations[i],"--",
+                    format(df.segment$datetime[1],format="%Y-%m-%d %H:%M")))
+    print(plt)
+  }
+  
+  dev.off()
+}
+
+graph.figures.rates(full.swap)
+```
+
+```{r duplicate figures}
+
+# graphing figures for rates--------------------------------------------
+graph.figures.rates.2 <-  function(mydata){
+  
+  incubations <- unique(mydata$incubation.number[!is.na(mydata$incubation.number)])
+  
+  pdf(file = paste0("R data/Figures/Figures(EXCR-S Fouling Test duplicate ", format(mydata$datetime[1],format = "%Y-%m-%d" ),").pdf"), 
+      width = 6, 
+      height = 6,
+      paper = "letter")
+  
+  for ( i in 1:length(incubations)){
+    df.segment <- mydata %>% 
+      filter(incubation.number==incubations[i])
+    plt <- ggplot( df.segment, aes(x=datetime,y=do.mgl))+
+      geom_point()+
+      geom_smooth(method = "lm")+
+      theme_classic()+
+      scale_x_datetime(date_breaks = "30 min",date_labels = "%H:%M")+
+      ylab("Dissolved Oygen (mg/L)")+
+      xlab("")+
+      ggtitle(paste("Incubation Number",incubations[i],"--",
+                    format(df.segment$datetime[1],format="%Y-%m-%d %H:%M")))
+    print(plt)
+  }
+  
+  dev.off()
+}
+
+graph.figures.rates.2(duplicate.swap)
+```
+
+
+
+```{rsecond swap figure}
+
+# graphing figures for rates--------------------------------------------
+graph.figures.rates <-  function(mydata){
+  
+  incubations <- unique(mydata$incubation.number[!is.na(mydata$incubation.number)])
+  
+  pdf(file = paste0("R data/Figures/Figures(EXCR-S Fouling Test 2 ", format(mydata$datetime[1],format = "%Y-%m-%d" ),").pdf"), 
+      width = 6, 
+      height = 6,
+      paper = "letter")
+  
+  for ( i in 1:length(incubations)){
+    df.segment <- mydata %>% 
+      filter(incubation.number==incubations[i])
+    plt <- ggplot( df.segment, aes(x=datetime,y=do.mgl))+
+      geom_point()+
+      geom_smooth(method = "lm")+
+      theme_classic()+
+      scale_x_datetime(date_breaks = "30 min",date_labels = "%H:%M")+
+      ylab("Dissolved Oygen (mg/L)")+
+      xlab("")+
+      ggtitle(paste("Incubation Number",incubations[i],"--",
+                    format(df.segment$datetime[1],format="%Y-%m-%d %H:%M")))
+    print(plt)
+  }
+  
+  dev.off()
+}
+
+graph.figures.rates(second.swap)
+```

@@ -1,0 +1,67 @@
+---
+title: "making big plot of fouling 2024"
+author: "Anna Mudahy"
+date: "2025-02-06"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r packages}
+
+library(tidyverse)
+library(readxl)
+library(broom)
+library(wesanderson)
+library(zoo)
+library(bayesbio)
+
+pal <- wes_palette("Zissou1",5,type="discrete")
+basic_theme <- theme(panel.grid=element_blank(),
+                     axis.text =  element_text(size=14),
+                     strip.text = element_text(size=14),
+                     axis.title = element_text(size=14),
+                     legend.title.text = element_text(size=12),
+                     legend.text = element_text(size=12)
+)
+```
+
+
+```{r load files and functions}
+
+load("R data/Rdata files/june.fouling.closest.time.Rdata")
+load("R data/Rdata files/ARC1b.closest.time.Rdata")
+load("R data/Rdata files/ES092724.closest.time.Rdata")
+load("R data/Rdata files/ARC1a_2nd.closest.time.Rdata")
+load("R data/Rdata files/ARC2.3.2nd.week.closest.time.Rdata")
+load("R data/Rdata files/ARC2.3.1st.week.closest.time.Rdata")
+
+```
+
+
+```{r pressure, echo=FALSE}
+  ggplot()+
+  #geom_point(data=ES060524.closest.time,aes(rate,rate.interp.1st,size = 0.8), shape = 21, stroke = 1,colour = "darkblue")+
+  geom_point(data=ES061324.closest.time,aes(y=rate,x=rate.interp.2nd,size = 0.8),shape = 21, stroke = 1,colour = pal[1])+
+  geom_point(data=ES092724.closest.time,aes(y=rate,x=rate.interp.2nd,size = 0.8),shape = 21, stroke = 1, colour = "lightblue")+
+  #geom_point(data=ARC2.3.1st.week.closest.time,aes(positive.rates,rate.ARC3,size = 0.8), shape = 21, stroke = 1, colour = "#8B6508")+
+  #geom_point(data=ARC2.3.2nd.week.closest.time,aes(positive.rates,rate.ARC3,size = 0.8),shape = 21, stroke = 1, colour = pal[3] )+
+  geom_point(data=ARC1b.closest.time,aes(y=positive.rates,x=rate.ARC2,size = 0.8), shape = 21, stroke = 1, colour ="#8B7B8b")+
+  geom_point(data=ARC1b.closest.time,aes(y=positive.rates,x=rate.ARC3,size = 0.8), shape = 21, stroke = 1, colour = "#DDA0DD")+
+  geom_point(data=ARC1a_2nd.closest.time,aes(y=positive.rates,x=rate.ARC3,size = 0.8),shape = 21, stroke = 1,colour = "#DB7093")+
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed")+# Add one-to-one line
+  theme_classic()+
+  labs(y="Newly Swapped ARC rates",x="Old ARC rates",colour="Deployment")
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
