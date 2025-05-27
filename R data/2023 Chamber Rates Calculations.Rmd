@@ -24,6 +24,7 @@ When you click the **Knit** button a document will be generated that includes bo
 library(tidyverse)
 library(lubridate)
 library(readxl)
+library(writexl)
 library(broom)
 library(here)
 ```
@@ -67,13 +68,13 @@ for(i in 1:length(rate.file.23)){
  rm(df)
 }
 
-deployments.2023.all<- deployments.2023.all %>% 
-rename(status=start.point)
+#deployments.2023.all<- deployments.2023.all %>% 
+#rename(status=start.point)
 ```
 
 gonna label all NA's as incubating in start point column and rename column to status
 
-```{r fixing status col}
+```{#r fixing status col}
 deployments.2023.all <- deployments.2023.all %>%
   replace_na(.,list(status="i")) %>% 
   mutate(status=ifelse(status=="s","flushing","incubating"))
@@ -156,7 +157,7 @@ WLIS_Deep_092023<- WLIS_Deep_092023 %>%
 
 
 
-```{r calc rates for full deployment}
+```{#r calc rates for full deployment}
 deployments.2023.all <- assign.incubation(deployments.2023.all)
 ```
 
@@ -278,6 +279,62 @@ for (i in 1:nrow(rates.2023)){
 }
 ```
 
+```{r save all rates for 2023}
+#save(rates.2023, file = here("R data/Rdata files", "Respiration Rates 2023.Rdata" ))
+
+```
+
+
+```{r write csv for rates for 2023}
+filenames.list <- list("EXCR_Shallow_062823.rates" = EXCR_Shallow_062823.rates,
+                    "EXCR_Shallow_082323.rates" = EXCR_Shallow_082323.rates,
+                    "ECXR_Deep_062823.rates" =  ECXR_Deep_062823.rates,
+                    "ECXR_Deep_071123.rates" =  ECXR_Deep_071123.rates,
+                    "ECXR_Deep_080123.rates" =  ECXR_Deep_080123.rates,
+                    "ECXR_Deep_082323.rates" = ECXR_Deep_082323.rates,
+                    "ECXR_Deep_091323.rates" = ECXR_Deep_091323.rates,
+                    "ECXR_Deep_092023.rates" = ECXR_Deep_092023.rates,
+                    "WLIS_Surface_062823.rates" = WLIS_Surface_062823.rates,
+                    "WLIS_Surface_080123.rates" = WLIS_Surface_080123.rates ,
+                    "WLIS_Surface_082323.rates" = WLIS_Surface_082323.rates,
+                    "WLIS_Surface_091323.rates" = WLIS_Surface_091323.rates,
+                    "WLIS_Surface_092023.rates" = WLIS_Surface_092023.rates,
+                    "WLIS_Deep_062823.rates" = WLIS_Deep_062823.rates,
+                    "WLIS_Deep_080123.rates" = WLIS_Deep_080123.rates,
+                    "WLIS_Deep_082323.rates" = WLIS_Deep_082323.rates,
+                    "WLIS_Deep_091323.rates" = WLIS_Deep_091323.rates,
+                    "WLIS_Deep_092023.rates" = WLIS_Deep_092023.rates)
+
+filename <- ls(pattern = "23.rates")
+
+for (i in names(filenames.list)) {
+write_xlsx(filenames.list[i], path = here("saved files", paste0(filename[i],".xlsx")), col_names = TRUE)
+}
+```
+
+
+```{#r write csv for rates for 2023}
+write_xlsx(EXCR_Shallow_062823.rates, here("saved files", paste0(filename[7],".xlsx")), col_names = TRUE)
+write_xlsx(EXCR_Shallow_082323.rates, path = here("saved files", paste0(filename[8],".xlsx")), col_names = TRUE)
+write_xlsx(ECXR_Deep_062823.rates, path = here("saved files", paste0(filename[1],".xlsx")), col_names = TRUE)
+write_xlsx(ECXR_Deep_071123.rates, path = here("saved files", paste0(filename[2],".xlsx")), col_names = TRUE)
+write_xlsx(ECXR_Deep_080123.rates, path = here("saved files", paste0(filename[3],".xlsx")), col_names = TRUE)
+write_xlsx(ECXR_Deep_082323.rates, path = here("saved files", paste0(filename[4],".xlsx")), col_names = TRUE)
+write_xlsx(ECXR_Deep_091323.rates, path = here("saved files", paste0(filename[5],".xlsx")), col_names = TRUE)
+write_xlsx(ECXR_Deep_092023.rates, path = here("saved files", paste0(filename[6],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Deep_062823.rates, path = here("saved files", paste0(filename[9],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Deep_080123.rates, path = here("saved files", paste0(filename[10],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Deep_082323.rates, path = here("saved files", paste0(filename[11],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Deep_091323.rates, path = here("saved files", paste0(filename[12],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Deep_092023.rates, path = here("saved files", paste0(filename[13],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Surface_062823.rates, path = here("saved files", paste0(filename[14],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Surface_080123.rates, path = here("saved files", paste0(filename[15],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Surface_082323.rates, path = here("saved files", paste0(filename[16],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Surface_091323.rates, path = here("saved files", paste0(filename[17],".xlsx")), col_names = TRUE)
+write_xlsx(WLIS_Surface_092023.rates, path = here("saved files", paste0(filename[18],".xlsx")), col_names = TRUE)
+
+```
+
 #make graphs for each deployment showing individual incubations get function from fucntion file and edit file name for pdf to match current data
 ```{r fucntion to grapph incubations for deployments}
 graph.figures.rates <-  function(mydata){
@@ -309,6 +366,7 @@ graph.figures.rates <-  function(mydata){
 }
 ```
 
+#Time to see what the data look like !!!!
 
 ```{r make graphs and saave as pdf}
   graph.figures.rates(EXCR_Shallow_062823)
@@ -332,10 +390,6 @@ graph.figures.rates <-  function(mydata){
   
 
 
-```
-
-```{r save all rates for 2023}
-#save(rates.2023, file = here("R data/Rdata files", "Respiration Rates 2023.Rdata" ))
 ```
 
 ```{r plot 2023 rates}

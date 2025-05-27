@@ -1,0 +1,336 @@
+---
+title: "2025 Respiration calculations"
+author: "Anna lisa Mudahy"
+date: "2025-05-22"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r load packages}
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(writexl)
+library(broom)
+library(here)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+source("R data/ARC Processing Functions with Voltage.R")
+```
+
+```{r load oxygen files}
+#define path for files needed that have similar pattern in name
+  o2.2025.files <- dir(path = here("Raw data/2025 sensor data"), pattern = "ft")
+#function to read all file names selected
+read.rates.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data",my.file), skip = 1) 
+  colnames(df) <- c("#","datetime","do.mgl","temp.f","start.point")
+    df <-  df %>%
+      select("#","datetime","do.mgl","temp.f","start.point") %>% 
+      mutate(datetime.2 = as.POSIXct(datetime, format = "%m/%d/%Y %H:%M", tz = "UTC"),
+           deployment = gsub("ft.*","",title)) %>%
+      mutate(datetime = as.POSIXct(datetime.2, tz = "America/New_York")) %>% 
+      select(-datetime.2) %>% 
+      filter(!is.na(do.mgl))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(o2.2025.files)){
+  title <- o2.2025.files[i]
+  title.fixed <- gsub("ft.*","",title)
+  df <-  read.rates.files(o2.2025.files[i]) %>% 
+    rename(status=start.point)
+  assign(paste0(title.fixed,"ft"),df)
+  rm(df)
+}
+```
+
+```{r load voltage files}
+
+#define path for files needed that have similar pattern in name
+voltage.2025.files <- dir(path = here("Raw data/2025 sensor data"),pattern = "Volt")
+
+#function to read all voltage file names selected
+read.voltage.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data",my.file)) %>%
+      mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+             Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+           deployment = gsub("_(\\d{1}).*","",title)) %>% 
+    mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, tz = "America/New_York"),
+      Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, tz = "America/New_York")) %>% 
+    mutate(datetime = Pump.Start.Time) %>% 
+    filter(!is.na(Loaded.Current..mA.))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(voltage.2025.files)){
+  title <- voltage.2025.files[i]
+  title.fixed <- gsub("_(\\d{1}).*","",title)
+  df <-  read.voltage.files(voltage.2025.files[i])
+  assign(title.fixed,df)
+  rm(df)
+}
+```
+
+Now that in have voltage and O2 data loaded I need to label flushing and incubating times using voltage data. To do this I'm gonna add the voltage data to the O2 data by matching the datetime from both columns
+
+
+```{r adding volatge data to O2 data }
+# make list of O2 data frame names
+arc.filenames <- ls(pattern = "ft")
+# make list of voltage data frame names
+voltage.filenames <- ls(pattern = "Volt")
+
+# make object lists of data frames
+arc.files <- lapply(arc.filenames, function(obj) {
+  if (is.data.frame(get(obj))) {
+    get(obj)
+  } else {
+    NULL
+  }
+})
+arc.files <- Filter(Negate(is.null), arc.files)
+
+voltage.files <- lapply(voltage.filenames, function(obj) {
+  if (is.data.frame(get(obj))) {
+    get(obj)
+  } else {
+    NULL
+  }
+})
+voltage.files <- Filter(Negate(is.null),voltage.files)
+
+```
+
+
+```{r adding volatge data to O2 data }
+#for loop to join matching O2 and voltage data frames
+for (i in seq_along(arc.files)) {
+arc_df <- arc.files[[i]]
+voltage_df <- voltage.files[[i]][c(6,9)]
+
+df <- left_join(arc_df,voltage_df,by = "datetime")
+
+df <- df %>% 
+  rename(Loaded.Current.mA=Loaded.Current..mA.)
+
+title <- arc.filenames[i]
+
+assign(paste0(title,".voltage"),df)
+rm(df)
+  
+}
+
+```
+
+Now I want to make a column called status that tells whether the chamber is incubating or flushing based on the value of the loading current i.e >3000 flushing
+
+```{r}
+#make list of combined O2 and voltage files
+voltage.o2.filenames <- ls(pattern = "\\.voltage")
+
+# make object lists of data frames
+
+voltage.o2.files <- lapply(voltage.o2.filenames, function(obj) {
+  if (is.data.frame(get(obj))) {
+    get(obj)
+  } else {
+    NULL
+  }
+})
+voltage.o2.files <- Filter(Negate(is.null),voltage.o2.files)
+
+for(i in seq_along(voltage.o2.files)){
+  
+  df <- voltage.o2.files[[i]]
+  df$status <- NA
+ 
+  for (j in 1:nrow(df)){
+    if(!is.na(df$Loaded.Current.mA[j]) & df$Loaded.Current.mA[j]>3000){
+       df$status[j] <- "flushing"
+    } else if (!is.na(df$Loaded.Current.mA[j]) & df$Loaded.Current.mA[j]<= 3000){
+       df$status[j] <- "improper flush/unplugged"
+    }else {
+      df$status[j] <- "incubating"
+    }
+    }
+ title <- voltage.o2.filenames[i]
+
+assign(paste(title,"with.status"),df) 
+rm(df)
+  }
+
+```
+
+Now that I have flushing and incubating  labeled time to assign incubation numbers and calculate the rates
+
+```{r}
+#make list of files with status
+status.filenames <- ls(pattern = "\\.status")
+
+# make object lists of data frames
+
+status.files <- lapply(status.filenames, function(obj) {
+  if (is.data.frame(get(obj))) {
+    get(obj)
+  } else {
+    NULL
+  }
+})
+status.files <- Filter(Negate(is.null),status.files)
+
+# assign incubation numbers and delete the last part after the chamber is removed from the water
+for (i in seq_along(status.files)){
+  
+  title <- arc.filenames[i]
+  
+  df <- status.files[[i]]
+  df <- assign.incubation(df)
+  
+assign(paste0(title,".incubations"),df)
+rm(df)
+
+}
+```
+
+
+```{r}
+# remove the data after recovery fo ARC
+
+#make list of files with incubation
+incubation.filenames <- ls(pattern = "\\.incubations")
+
+# make object lists of data frames
+
+incubation.files <- lapply(incubation.filenames, function(obj) {
+  if (is.data.frame(get(obj))) {
+    get(obj)
+  } else {
+    NULL
+  }
+})
+incubation.files <- Filter(Negate(is.null),incubation.files)
+
+#run loop to remove data after recovery
+
+for (i in seq_along(incubation.files)){
+
+title <- arc.filenames[i]
+df <- incubation.files[[i]]
+
+test <- slice(df, 1:which(df$incubation.number==max(df$incubation.number,na.rm =TRUE) & df$status=="improper flush/unplugged"))
+  
+test <- slice(df, 1:which(df$incubation.number==max(df$incubation.number,na.rm =TRUE) & abs(df$do.mgl[-1] - df$do.mgl) >= 0.5))
+
+assign(paste0(title,".incubation.cleaned"),test)
+
+rm(test,df)
+}
+```
+
+
+```{r CALCULATE THE RATES AND SAVE EM}
+
+#make list of files with incubation cleaned
+cleaned.filenames <- ls(pattern = "\\.incubation.cleaned")
+
+# make object lists of data frames
+
+cleaned.files <- lapply(cleaned.filenames, function(obj) {
+  if (is.data.frame(get(obj))) {
+    get(obj)
+  } else {
+    NULL
+  }
+})
+cleaned.files <- Filter(Negate(is.null),cleaned.files)
+
+
+
+# calculate rates 
+for (i in seq_along(cleaned.files)){
+  
+  title <- arc.filenames[i]
+  
+  df <- cleaned.files[[i]]
+  df.rates <- calculate_slope(df)
+  df.rates$deployment <- title
+  
+assign(paste0(title,".rates"),df.rates)
+
+rm(df,df.rates)
+}
+
+```
+
+gonna save rates as Rdata files and as csv files to export
+```{r}
+#make list of files with rates
+rate.filenames <- ls(pattern = "\\.rates")
+
+# make object lists of data frames
+
+rate.files <- lapply(rate.filenames, function(obj) {
+  if (is.data.frame(get(obj))) {
+    get(obj)
+  } else {
+    NULL
+  }
+})
+rate.files <- Filter(Negate(is.null),rate.files)
+
+# save rates
+for (i in seq_along(rate.files)){
+  
+  df <- rate.files[[i]]
+  
+save(df, file = here("R data/Rdata files",paste0(rate.filenames[i],".Rdata")))
+
+write_xlsx(df, path = here("saved files",paste0(rate.filenames[i],".xlsx")), col_names = TRUE)
+
+rm(df)
+}
+
+
+```
+
+make figures for each deployment now that rates are calculated
+NEED TO FINISH GRAPHOING THE FIGURES
+
+```{r graph incubations}
+
+for (i in seq_along(cleaned.files)){
+  
+  df <- cleaned.files[[i]]
+  
+  graph.figures.rates(df)
+
+  rm(df)
+}
+
+```
+
