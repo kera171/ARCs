@@ -14,6 +14,8 @@ assign.incubation <- function(mydata){
       df$incubation.number[i] <- incubation
     }
   }
+  df <- df %>% 
+    filter(incubation.number!=0)
   return(df) }
 
 # calculate slopes from hobo data for each chamber----------------------------------------------

@@ -339,7 +339,7 @@ plt.1 <-ggplot()+
   geom_hline(yintercept = 0)+
   theme_classic()+
   basic_theme+
-   labs(x="",y= "")+
+   labs(x="",y= "(Fresh ARC - Aged ARC)/Fresh ARC")+
    scale_y_discrete(limits = seq(-8,4.2,2))+
   scale_x_datetime(date_breaks = "2 days",expand = c(0.02,0), limits = c(as.POSIXct("2024-06-07"),as.POSIXct("2024-06-13 12:00:00")),date_labels = "%b-%d")+
   annotate("text",x = as.POSIXct("2024-06-07"), y= -6.3,
@@ -373,3 +373,26 @@ plt.1+plt.2+plot_layout(nrow = 1)+
 
 ```
 
+```{r testing if the mean difference is less than zero}
+
+t.test(ES060524.closest.time$normalized.diff,alternative = "less", conf.level = 0.95)
+
+t.test(ES061324.closest.time$normalized.diff,alternative = "less", conf.level = 0.95)
+
+t.test(ES061324.closest.time$rate,ES061324.closest.time$rate.interp.2nd, paired = TRUE, alternative = "two.sided", conf.level = 0.95, mu = 0)
+
+t.test(ES061324.closest.time$rate,ES061324.closest.time$rate.interp.2nd, paired = TRUE, alternative = "greater", conf.level = 0.95, mu = 0)
+
+```
+
+
+One Sample t-test
+
+data:  ES061324.closest.time$normalized.diff
+t = -1.2062, df = 23, p-value = 0.12
+alternative hypothesis: true mean is less than 0
+95 percent confidence interval:
+     -Inf 0.085785
+sample estimates:
+ mean of x 
+-0.2038027 

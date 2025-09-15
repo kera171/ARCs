@@ -28,15 +28,19 @@ library(here)
 
 ## Including Plots
 
-You can also embed plots, for example:
+*Notes for errors 
 
-```{r pressure, echo=FALSE}
+1)make sure dates are good. Oxygen files from OneDrive have to be opened and manually saved in Excel back to the same folder for the datetime to read correctly. No changes have to be made to he files. Just open them and resave. 
+2)stuck at incubation..make sure voltage.status is correct and files were read in correctly
+
+```{r Load functions, echo=FALSE}
 source("R data/ARC Processing Functions with Voltage.R")
 ```
 
-```{r load oxygen files}
+#Load sensor files from 4/25/25,4/26/25,5/10/25,5/11/25,5/12/25
+```{r load oxygen files without adjusted oxygen}
 #define path for files needed that have similar pattern in name
-  o2.2025.files <- dir(path = here("Raw data/2025 sensor data"), pattern = "ft")
+  o2.2025.files <- dir(path = here("Raw data/2025 sensor data"), pattern = c("ft"))
 #function to read all file names selected
 read.rates.files <- function(my.file){
   print(my.file)
@@ -59,6 +63,7 @@ for(i in 1:length(o2.2025.files)){
   title <- o2.2025.files[i]
   title.fixed <- gsub("ft.*","",title)
   df <-  read.rates.files(o2.2025.files[i]) %>% 
+     df <-  read.rates.files(df) %>% 
     rename(status=start.point)
   assign(paste0(title.fixed,"ft"),df)
   rm(df)
@@ -68,7 +73,7 @@ for(i in 1:length(o2.2025.files)){
 ```{r load voltage files}
 
 #define path for files needed that have similar pattern in name
-voltage.2025.files <- dir(path = here("Raw data/2025 sensor data"),pattern = "Volt")
+voltage.2025.files <- dir(path = here("Raw data/2025 sensor data"),pattern = c("ft"))
 
 #function to read all voltage file names selected
 read.voltage.files <- function(my.file){
@@ -96,12 +101,354 @@ for(i in 1:length(voltage.2025.files)){
 }
 ```
 
-Now that in have voltage and O2 data loaded I need to label flushing and incubating times using voltage data. To do this I'm gonna add the voltage data to the O2 data by matching the datetime from both columns
 
 
-```{r adding volatge data to O2 data }
+#Load sensor files from 5/23/25
+```{r load oxygen files without adjusted oxygen}
+#define path for files needed that have similar pattern in name
+  o2.2025.files <- dir(path = here("Raw data/2025 sensor data"), pattern = c("ft"))
+#function to read all file names selected
+read.rates.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data",my.file), skip = 1) 
+  colnames(df) <- c("#","datetime","do.mgl","temp.f","start.point")
+    df <-  df %>%
+      select("#","datetime","do.mgl","temp.f","start.point") %>% 
+      mutate(datetime.2 = as.POSIXct(datetime, format = "%m/%d/%Y %H:%M", tz = "UTC"),
+           deployment = gsub("ft.*","",title)) %>%
+      mutate(datetime = as.POSIXct(datetime.2, tz = "America/New_York")) %>% 
+      select(-datetime.2) %>% 
+      filter(!is.na(do.mgl))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(o2.2025.files)){
+  title <- o2.2025.files[i]
+  #title.fixed <- gsub("ft.*","",title)
+  df <-  read.rates.files(o2.2025.files[i]) %>% 
+     df <-  read.rates.files(df) %>% 
+    rename(status=start.point)
+  assign(paste0(title),df)
+  rm(df)
+}
+```
+
+```{r load voltage files}
+
+#define path for files needed that have similar pattern in name
+voltage.2025.files <- dir(path = here("Raw data/2025 sensor data"),pattern = c("ft"))
+
+#function to read all voltage file names selected
+read.voltage.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data",my.file)) %>%
+      mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+             Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+           deployment = gsub("_(\\d{1}).*","",title)) %>% 
+    mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, tz = "America/New_York"),
+      Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, tz = "America/New_York")) %>% 
+    mutate(datetime = Pump.Start.Time) %>% 
+    filter(!is.na(Loaded.Current..mA.))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(voltage.2025.files)){
+  title <- voltage.2025.files[i]
+  #title.fixed <- gsub("_(\\d{1}).*","",title)
+  df <-  read.voltage.files(voltage.2025.files[i])
+  assign(title,df)
+  rm(df)
+}
+```
+
+
+
+
+
+#Load sensor and voltage files from 6/5/25,6/18/25,7/5/25
+```{r load oxygen files with adjusted oxygen}
+#define path for files needed that have similar pattern in name
+  o2.2025.files <- dir(path = here("Raw data/2025 sensor data"), pattern = c("ft_6|ft_7"))
+#function to read all file names selected
+read.rates.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data",my.file), skip = 1) 
+  colnames(df) <- c("#","datetime","do.mgl","temp.f","do.adjusted","do.percent","start.point")
+    df <-  df %>%
+      select("#","datetime","do.adjusted","temp.f","start.point") %>% 
+      mutate(datetime.2 = as.POSIXct(datetime, format = "%m/%d/%Y %H:%M", tz = "UTC"),
+           deployment = gsub("ft.*","",title)) %>%
+      mutate(datetime = as.POSIXct(datetime.2, tz = "America/New_York")) %>% 
+      select(-datetime.2) %>% 
+      filter(!is.na(do.adjusted))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(o2.2025.files)){
+  title <- o2.2025.files[i]
+  title.fixed <- gsub(".csv*","",title)
+  df <-  read.rates.files(o2.2025.files[i]) %>% 
+    rename(status=start.point,
+           do.mgl=do.adjusted)
+  assign(paste0(title.fixed),df)
+  rm(df)
+}
+```
+
+```{r load voltage files}
+
+#define path for files needed that have similar pattern in name
+voltage.2025.files <- dir(path = here("Raw data/2025 sensor data"),pattern = c("VoltData_6|VoltData_7"))
+
+#function to read all voltage file names selected
+read.voltage.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data",my.file)) %>%
+      mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+             Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+           deployment = gsub("_(\\d{1}).*","",title)) %>% 
+    mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, tz = "America/New_York"),
+      Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, tz = "America/New_York")) %>% 
+    mutate(datetime = Pump.Start.Time) %>% 
+    filter(!is.na(Loaded.Current..mA.))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(voltage.2025.files)){
+  title <- voltage.2025.files[i]
+  title.fixed <- gsub(".csv.*","",title, ignore.case = TRUE)
+  df <-  read.voltage.files(voltage.2025.files[i])
+  assign(title.fixed,df)
+  rm(df)
+}
+```
+
+
+
+
+#Load sensor and voltage files from 7/16/25
+ARC04 did not not have a do conc only do adjusted so file would not read correctly. I added a column as filler labeled do.mgl to the raw csv file to make the file read accurately
+```{r load oxygen files with adjusted oxygen}
+#define path for files needed that have similar pattern in name
+  o2.2025.files <- dir(path = here("Raw data/2025 sensor data/MID4_7-16-25_8-6-25"), pattern = c("Inside"))
+#function to read all file names selected
+read.rates.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data/MID4_7-16-25_8-6-25",my.file), skip = 1) 
+  colnames(df) <- c("#","datetime","do.mgl","temp.f","do.adjusted","do.percent","start.point")
+    df <-  df %>%
+      select("#","datetime","do.adjusted","temp.f","start.point") %>% 
+      mutate(datetime.2 = as.POSIXct(datetime, format = "%m/%d/%Y %H:%M", tz = "UTC"),
+           deployment = gsub("ft.*","",title)) %>%
+      mutate(datetime = as.POSIXct(datetime.2, tz = "America/New_York")) %>% 
+      select(-datetime.2) %>% 
+      filter(!is.na(do.adjusted))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(o2.2025.files)){
+  title <- o2.2025.files[i]
+  title.fixed <- gsub(".csv*","",title)
+  df <-  read.rates.files(o2.2025.files[i]) %>% 
+    rename(status=start.point,
+           do.mgl=do.adjusted)
+  assign(paste0(title.fixed),df)
+  rm(df)
+}
+```
+
+```{r load voltage files}
+
+#define path for files needed that have similar pattern in name
+voltage.2025.files <- dir(path = here("Raw data/2025 sensor data/MID4_7-16-25_8-6-25"),pattern = c("VoltData"))
+
+#function to read all voltage file names selected
+read.voltage.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data/MID4_7-16-25_8-6-25",my.file)) %>%
+      mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+             Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+           deployment = gsub("_(\\d{1}).*","",title)) %>% 
+    mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, tz = "America/New_York"),
+      Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, tz = "America/New_York")) %>% 
+    mutate(datetime = Pump.Start.Time) %>% 
+    filter(!is.na(Loaded.Current..mA.))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(voltage.2025.files)){
+  title <- voltage.2025.files[i]
+  title.fixed <- gsub(".csv.*","",title, ignore.case = TRUE)
+  df <-  read.voltage.files(voltage.2025.files[i])
+  assign(title.fixed,df)
+  rm(df)
+}
+```
+
+
+
+
+#Load sensor and voltage files from 7/23/25
+ARC12 did not not have a voltage file so I copied the volt file for ARC16 to use for ARC 12. 
+```{r load oxygen files with adjusted oxygen}
+#define path for files needed that have similar pattern in name
+  o2.2025.files <- dir(path = here("Raw data/2025 sensor data/MID4_7-23-25_8-25-25"), pattern = c("Inside"))
+#function to read all file names selected
+read.rates.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data/MID4_7-23-25_8-25-25",my.file), skip = 1) 
+  colnames(df) <- c("#","datetime","do.mgl","temp.f","do.adjusted","do.percent","start.point")
+    df <-  df %>%
+      select("#","datetime","do.adjusted","temp.f","start.point") %>% 
+      mutate(datetime.2 = as.POSIXct(datetime, format = "%m/%d/%Y %H:%M", tz = "UTC"),
+           deployment = gsub("ft.*","ft",title)) %>%
+      mutate(datetime = as.POSIXct(datetime.2, tz = "America/New_York")) %>% 
+      select(-datetime.2) %>% 
+      filter(!is.na(do.adjusted))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(o2.2025.files)){
+  title <- o2.2025.files[i]
+  title.fixed <- gsub("ft.*","",title)
+  df <-  read.rates.files(o2.2025.files[i]) %>% 
+    rename(status=start.point,
+           do.mgl=do.adjusted)
+  assign(paste0(title.fixed,"ft"),df)
+  rm(df)
+}
+```
+
+**When you run this next section remove volt files for 8 and 9 
+```{r load voltage files}
+
+#define path for files needed that have similar pattern in name
+voltage.2025.files <- dir(path = here("Raw data/2025 sensor data/MID4_7-23-25_8-25-25"),pattern = c("VoltData"))
+
+#function to read all voltage file names selected
+read.voltage.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data/MID4_7-23-25_8-25-25",my.file)) %>%
+      mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+             Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+           deployment = gsub("_(\\d{1}).*","",title)) %>% 
+    mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, tz = "America/New_York"),
+      Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, tz = "America/New_York")) %>% 
+    mutate(datetime = Pump.Start.Time) %>% 
+    filter(!is.na(Loaded.Current..mA.))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(voltage.2025.files)){
+  title <- voltage.2025.files[i]
+  title.fixed <- gsub(".csv.*","",title, ignore.case = TRUE)
+  df <-  read.voltage.files(voltage.2025.files[i])
+  assign(title.fixed,df)
+  rm(df)
+}
+rm(`ARC08_MID4_VoltData_7-23-25_8-25-25`,`ARC09_MID4_VoltData_7-23-25_8-25-25`)
+```
+
+
+#Load sensor and voltage files from 8/25/25
+** removed the clear files that loaded as I plan to run them separately
+```{r load oxygen files with adjusted oxygen}
+#define path for files needed that have similar pattern in name
+  o2.2025.files <- dir(path = here("Raw data/2025 sensor data/MID4_8-25-25_9-11-25"), pattern = c("Inside"))
+#function to read all file names selected
+read.rates.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data/MID4_8-25-25_9-11-25",my.file), skip = 1) 
+  colnames(df) <- c("#","datetime","do.mgl","temp.f","do.adjusted","do.percent","start.point")
+    df <-  df %>%
+      select("#","datetime","do.adjusted","temp.f","start.point") %>% 
+      mutate(datetime.2 = as.POSIXct(datetime, format = "%m/%d/%Y %H:%M", tz = "UTC"),
+           deployment = gsub("ft.*","ft",title)) %>%
+      mutate(datetime = as.POSIXct(datetime.2, tz = "America/New_York")) %>% 
+      select(-datetime.2) %>% 
+      filter(!is.na(do.adjusted))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(o2.2025.files)){
+  title <- o2.2025.files[i]
+  title.fixed <- gsub("ft.*","",title)
+  df <-  read.rates.files(o2.2025.files[i]) %>% 
+    rename(status=start.point,
+           do.mgl=do.adjusted)
+  assign(paste0(title.fixed,"ft"),df)
+  rm(df)
+}
+rm(ARC06_MID4_Clear_7ft,ARC07_MID4_Clear_11ft)
+```
+
+**When you run this next section remove volt files for that don't have matching sensor data file
+```{r load voltage files}
+
+#define path for files needed that have similar pattern in name
+voltage.2025.files <- dir(path = here("Raw data/2025 sensor data/MID4_8-25-25_9-11-25"),pattern = c("VoltData"))
+
+#function to read all voltage file names selected
+read.voltage.files <- function(my.file){
+  print(my.file)
+  title <- my.file
+  df <- read.csv(here("Raw data/2025 sensor data/MID4_8-25-25_9-11-25",my.file)) %>%
+      mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+             Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, format = "%Y-%m-%dT %H:%M:%S", tz = "UTC"),
+           deployment = gsub("_(\\d{1}).*","",title)) %>% 
+    mutate(Pump.Start.Time = as.POSIXct(Pump.Start.Time, tz = "America/New_York"),
+      Pump.Stop.Time = as.POSIXct(Pump.Stop.Time, tz = "America/New_York")) %>% 
+    mutate(datetime = Pump.Start.Time) %>% 
+    filter(!is.na(Loaded.Current..mA.))
+    
+  return(df)
+}
+
+# gives rate files as separate files
+for(i in 1:length(voltage.2025.files)){
+  title <- voltage.2025.files[i]
+  title.fixed <- gsub(".csv.*","",title, ignore.case = TRUE)
+  df <-  read.voltage.files(voltage.2025.files[i])
+  assign(title.fixed,df)
+  rm(df)
+}
+rm(`ARC06_MID4_VoltData_8-25-25_9-11-25`,`ARC07_MID4_VoltData_8-25-25_9-11-25`)
+```
+
+
+##Now that I have voltage and O2 data loaded I need to label flushing and incubating times using voltage data. To do this I'm gonna add the voltage data to the O2 data by matching the datetime from both columns
+
+```{r making a list of each dataset voth sensor and volt data to run for rates later }
 # make list of O2 data frame names
-arc.filenames <- ls(pattern = "ft")
+arc.filenames <- ls(pattern = #"ft" 
+                      "Dark")
 # make list of voltage data frame names
 voltage.filenames <- ls(pattern = "Volt")
 
@@ -126,17 +473,17 @@ voltage.files <- Filter(Negate(is.null),voltage.files)
 
 ```
 
-
 ```{r adding volatge data to O2 data }
 #for loop to join matching O2 and voltage data frames
 for (i in seq_along(arc.files)) {
 arc_df <- arc.files[[i]]
-voltage_df <- voltage.files[[i]][c(6,9)]
+voltage_df <-  voltage.files[[i]][c(6,9)]
 
-df <- left_join(arc_df,voltage_df,by = "datetime")
+#full joined bcs time from sensor and volt data are off  by 1 minute
+df <- full_join(arc_df,voltage_df,by = "datetime") %>% 
+  arrange(datetime)
 
-df <- df %>% 
-  rename(Loaded.Current.mA=Loaded.Current..mA.)
+df <- rename(df, Loaded.Current.mA=Loaded.Current..mA.)
 
 title <- arc.filenames[i]
 
@@ -147,11 +494,12 @@ rm(df)
 
 ```
 
+
 Now I want to make a column called status that tells whether the chamber is incubating or flushing based on the value of the loading current i.e >3000 flushing
 
 ```{r}
 #make list of combined O2 and voltage files
-voltage.o2.filenames <- ls(pattern = "\\.voltage")
+voltage.o2.filenames <- ls(pattern = ".voltage")
 
 # make object lists of data frames
 
@@ -170,9 +518,9 @@ for(i in seq_along(voltage.o2.files)){
   df$status <- NA
  
   for (j in 1:nrow(df)){
-    if(!is.na(df$Loaded.Current.mA[j]) & df$Loaded.Current.mA[j]>3000){
+    if(!is.na(df$Loaded.Current.mA[j]) & df$Loaded.Current.mA[j]>200){
        df$status[j] <- "flushing"
-    } else if (!is.na(df$Loaded.Current.mA[j]) & df$Loaded.Current.mA[j]<= 3000){
+    } else if (!is.na(df$Loaded.Current.mA[j]) & df$Loaded.Current.mA[j]<= 200){
        df$status[j] <- "improper flush/unplugged"
     }else {
       df$status[j] <- "incubating"
@@ -186,7 +534,8 @@ rm(df)
 
 ```
 
-Now that I have flushing and incubating  labeled time to assign incubation numbers and calculate the rates
+Now that I have flushing and incubating labeled time to assign incubation numbers 
+
 
 ```{r}
 #make list of files with status
@@ -203,7 +552,7 @@ status.files <- lapply(status.filenames, function(obj) {
 })
 status.files <- Filter(Negate(is.null),status.files)
 
-# assign incubation numbers and delete the last part after the chamber is removed from the water
+# assign incubation numbers 
 for (i in seq_along(status.files)){
   
   title <- arc.filenames[i]
@@ -218,7 +567,7 @@ rm(df)
 ```
 
 
-```{r}
+```{r Remove extra data}
 # remove the data after recovery fo ARC
 
 #make list of files with incubation
@@ -308,9 +657,9 @@ for (i in seq_along(rate.files)){
   
   df <- rate.files[[i]]
   
-save(df, file = here("R data/Rdata files",paste0(rate.filenames[i],".Rdata")))
+save(df, file = here("R data/Rdata files",paste0(rate.filenames[i] ,format(df$datetime[1],format = "%Y-%m-%d" ),".Rdata")))
 
-write_xlsx(df, path = here("saved files",paste0(rate.filenames[i],".xlsx")), col_names = TRUE)
+write_xlsx(df, path = here("saved files",paste0(rate.filenames[i] ,format(df$datetime[1],format = "%Y-%m-%d" ),".xlsx")), col_names = TRUE)
 
 rm(df)
 }
@@ -319,7 +668,6 @@ rm(df)
 ```
 
 make figures for each deployment now that rates are calculated
-NEED TO FINISH GRAPHOING THE FIGURES
 
 ```{r graph incubations}
 
